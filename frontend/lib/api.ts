@@ -24,7 +24,9 @@ async function fetchApi<T>(path: string, options: RequestInit = {}): Promise<T> 
       if (errorData.detail) {
         errorMessage = typeof errorData.detail === 'string' ? errorData.detail : JSON.stringify(errorData.detail);
       }
-    } catch (e) {}
+    } catch {
+      // error handled
+    }
     throw new ApiError(errorMessage, response.status);
   }
 
@@ -42,7 +44,7 @@ export const api = {
   getUpcomingMeetings: () => fetchApi('/meetings/upcoming'),
   getRecentMeetings: () => fetchApi('/meetings/recent'),
   getMeeting: (code: string) => fetchApi(`/meetings/${code}`),
-  updateMeeting: (code: string, data: any) => fetchApi(`/meetings/${code}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  updateMeeting: (code: string, data: Record<string, unknown>) => fetchApi(`/meetings/${code}`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteMeeting: (code: string) => fetchApi(`/meetings/${code}`, { method: 'DELETE' }),
   joinMeeting: (code: string, data: { display_name: string }) => fetchApi(`/meetings/${code}/join`, { method: 'POST', body: JSON.stringify(data) }),
   leaveMeeting: (code: string, data: { participant_id: number }) => fetchApi(`/meetings/${code}/leave`, { method: 'POST', body: JSON.stringify(data) }),
