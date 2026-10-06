@@ -1,16 +1,9 @@
+'use client';
+
 import React from 'react';
-import VideoTile from './VideoTile';
+import VideoTile, { TileParticipant } from './VideoTile';
 
-interface Participant {
-  id: number;
-  name: string;
-  isHost?: boolean;
-  isMe?: boolean;
-  isMuted: boolean;
-  isVideoOff: boolean;
-}
-
-export default function VideoGrid({ participants }: { participants: Participant[] }) {
+export default function VideoGrid({ participants }: { participants: TileParticipant[] }) {
   const count = participants.length;
 
   let gridClass = 'grid-cols-1';

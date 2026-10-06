@@ -37,6 +37,26 @@ async function fetchApi<T>(path: string, options: RequestInit = {}): Promise<T> 
   return response.json();
 }
 
+/**
+ * Fire-and-forget leave call for pagehide / beforeunload.
+ * Uses sendBeacon if available, otherwise fetch with keepalive.
+ */
+export function leaveMeetingBeacon(code: string, participantId: number) {
+  const url = `${API_URL}/api/meetings/${code}/leave`;
+  const body = JSON.stringify({ participant_id: participantId });
+  if (navigator.sendBeacon) {
+    const blob = new Blob([body], { type: 'application/json' });
+    navigator.sendBeacon(url, blob);
+  } else {
+    fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+      keepalive: true,
+    }).catch(() => {});
+  }
+}
+
 export const api = {
   getMe: () => fetchApi('/me'),
   createInstantMeeting: (data?: { title?: string }) => fetchApi('/meetings/instant', { method: 'POST', body: JSON.stringify(data || {}) }),
