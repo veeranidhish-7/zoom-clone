@@ -9,7 +9,7 @@ interface MeetingListProps {
 }
 
 export function MeetingList({ type }: MeetingListProps) {
-  const [meetings, setMeetings] = useState<Record<string, unknown>[]>([]);
+  const [meetings, setMeetings] = useState<({ id: string | number } & Record<string, unknown>)[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -18,7 +18,7 @@ export function MeetingList({ type }: MeetingListProps) {
       try {
         setLoading(true);
         const data = type === "upcoming" ? await api.getUpcomingMeetings() : await api.getRecentMeetings();
-        if (mounted) setMeetings(data as Record<string, unknown>[]);
+        if (mounted) setMeetings(data as ({ id: string | number } & Record<string, unknown>)[]);
       } catch (err) {
         console.error("Failed to fetch meetings", err);
       } finally {

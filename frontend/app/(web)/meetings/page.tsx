@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
@@ -17,7 +17,7 @@ interface Meeting {
   status: string;
 }
 
-export default function MeetingsPage() {
+function MeetingsContent() {
   const searchParams = useSearchParams();
   const tab = searchParams.get('tab') === 'previous' ? 'previous' : 'upcoming';
   
@@ -26,9 +26,9 @@ export default function MeetingsPage() {
 
   useEffect(() => {
     let isMounted = true;
-    setIsLoading(true);
     
     const fetchMeetings = async () => {
+      setIsLoading(true);
       try {
         const data = tab === 'upcoming' 
           ? await api.getUpcomingMeetings() 
@@ -73,5 +73,13 @@ export default function MeetingsPage() {
         <EmptyState />
       )}
     </div>
+  );
+}
+
+export default function MeetingsPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <MeetingsContent />
+    </Suspense>
   );
 }

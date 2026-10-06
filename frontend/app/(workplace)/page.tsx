@@ -18,7 +18,7 @@ export default function WorkplaceHome() {
   const handleNewMeeting = async () => {
     try {
       setCreatingMeeting(true);
-      const meeting = await api.createInstantMeeting();
+      const meeting = await api.createInstantMeeting() as { meeting_code: string };
       router.push(`/meeting/${meeting.meeting_code}/join`);
     } catch (err: unknown) {
       setToast(err instanceof Error ? err.message : "Failed to create meeting");

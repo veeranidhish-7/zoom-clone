@@ -1,31 +1,53 @@
+'use client';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+
 export default function WorkplaceLayout({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const isHomeActive = pathname === '/';
+  const isMeetingsActive = pathname?.startsWith('/meetings');
+
   return (
     <div className="flex h-screen bg-white text-[var(--text-body)]">
       {/* Narrow sidebar */}
       <aside className="w-[72px] flex-shrink-0 bg-[var(--sidebar-wp)] border-r border-[var(--divider)] flex flex-col items-center py-4 gap-6">
-        <div className="flex flex-col items-center gap-1 text-[var(--blue-tile)] cursor-pointer">
-          <div className="w-10 h-10 rounded-xl bg-[var(--blue-tint)] flex items-center justify-center">
-            <div className="w-5 h-5 bg-[var(--blue-tile)] rounded-sm" />
+        <Link 
+          href="/" 
+          className={`flex flex-col items-center gap-1 cursor-pointer transition group ${
+            isHomeActive ? 'text-[var(--blue-tile)]' : 'text-[var(--text-sidebar)] hover:text-[var(--text-body)]'
+          }`}
+        >
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${
+            isHomeActive ? 'bg-[var(--blue-tint)]' : 'group-hover:bg-[#E5E7EB]'
+          }`}>
+            <div className={`w-5 h-5 rounded-sm ${isHomeActive ? 'bg-[var(--blue-tile)]' : 'bg-[var(--text-sidebar)]'}`} />
           </div>
-          <span className="text-[11px] font-medium">Home</span>
-        </div>
+          <span className={`text-[11px] ${isHomeActive ? 'font-medium' : ''}`}>Home</span>
+        </Link>
         
-        <div className="flex flex-col items-center gap-1 text-[var(--text-sidebar)] hover:text-[var(--text-body)] cursor-pointer">
-          <div className="w-10 h-10 flex items-center justify-center hover:bg-[#E5E7EB] rounded-xl transition-colors">
+        <div className="flex flex-col items-center gap-1 text-[var(--text-sidebar)] hover:text-[var(--text-body)] cursor-pointer group transition">
+          <div className="w-10 h-10 flex items-center justify-center group-hover:bg-[#E5E7EB] rounded-xl transition-colors">
             <div className="w-5 h-5 bg-[var(--text-sidebar)] rounded-sm" />
           </div>
           <span className="text-[11px]">Chat</span>
         </div>
         
-        <div className="flex flex-col items-center gap-1 text-[var(--text-sidebar)] hover:text-[var(--text-body)] cursor-pointer">
-          <div className="w-10 h-10 flex items-center justify-center hover:bg-[#E5E7EB] rounded-xl transition-colors">
-            <div className="w-5 h-5 bg-[var(--text-sidebar)] rounded-sm" />
+        <Link 
+          href="/meetings" 
+          className={`flex flex-col items-center gap-1 cursor-pointer transition group ${
+            isMeetingsActive ? 'text-[var(--blue-tile)]' : 'text-[var(--text-sidebar)] hover:text-[var(--text-body)]'
+          }`}
+        >
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${
+            isMeetingsActive ? 'bg-[var(--blue-tint)]' : 'group-hover:bg-[#E5E7EB]'
+          }`}>
+            <div className={`w-5 h-5 rounded-sm ${isMeetingsActive ? 'bg-[var(--blue-tile)]' : 'bg-[var(--text-sidebar)]'}`} />
           </div>
-          <span className="text-[11px]">Meetings</span>
-        </div>
+          <span className={`text-[11px] ${isMeetingsActive ? 'font-medium' : ''}`}>Meetings</span>
+        </Link>
 
-        <div className="flex flex-col items-center gap-1 text-[var(--text-sidebar)] hover:text-[var(--text-body)] cursor-pointer">
-          <div className="w-10 h-10 flex items-center justify-center hover:bg-[#E5E7EB] rounded-xl transition-colors">
+        <div className="flex flex-col items-center gap-1 text-[var(--text-sidebar)] hover:text-[var(--text-body)] cursor-pointer group transition">
+          <div className="w-10 h-10 flex items-center justify-center group-hover:bg-[#E5E7EB] rounded-xl transition-colors">
             <div className="w-5 h-5 bg-[var(--text-sidebar)] rounded-sm" />
           </div>
           <span className="text-[11px]">Contacts</span>

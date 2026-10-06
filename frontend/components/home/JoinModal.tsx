@@ -20,7 +20,7 @@ export function JoinModal({ onClose }: JoinModalProps) {
     let mounted = true;
     const fetchUser = async () => {
       try {
-        const me = await api.getMe();
+        const me = await api.getMe() as { name?: string };
         if (mounted && me.name) setDisplayName(me.name);
       } catch {
         // error handled

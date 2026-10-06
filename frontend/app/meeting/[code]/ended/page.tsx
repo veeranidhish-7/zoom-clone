@@ -1,13 +1,20 @@
 'use client';
-import Link from 'next/link';
 
-export default function MeetingEnded() {
+import React from 'react';
+import { useRouter } from 'next/navigation';
+
+export default function MeetingEndedPage() {
+  const router = useRouter();
+
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center">
-      <h1 className="text-3xl font-bold text-[var(--text-heading)] mb-6">Meeting ended</h1>
-      <Link href="/" className="bg-[var(--blue-button)] text-white px-6 py-2 rounded font-medium hover:opacity-90">
+    <div className="flex h-screen w-screen flex-col items-center justify-center bg-white font-[var(--font-body)] text-[var(--text-heading)]">
+      <h1 className="mb-6 text-3xl font-semibold">Meeting ended</h1>
+      <button 
+        onClick={() => router.push('/')}
+        className="rounded-[8px] bg-[var(--blue-button)] px-6 py-2.5 text-[14px] font-medium text-white hover:opacity-90 transition shadow-sm"
+      >
         Return to Home
-      </Link>
+      </button>
     </div>
   );
 }
