@@ -1,0 +1,47 @@
+:root {
+  /* brand */
+  --blue-button: #0D6BDE;
+  --blue-tile: #0E71EB;
+  --blue-web-tile: #0D72ED;
+  --blue-logo: #0B5CFF;
+  --blue-chat: #4488FF;
+  --orange-new: #FF742E;
+  --orange-host: #F26D20;
+  /* light surfaces */
+  --sidebar-web: #F7F7FA;
+  --sidebar-selected: #F2F8FF;
+  --sidebar-wp: #F1F4F6;
+  --search-fill: #ECEFF1;
+  --white: #FFFFFF;
+  --blue-tint: #E7F1FD;
+  --blue-border: #A8CCF8;
+  --promo-green: #E5F7EB;
+  --icon-pink: #FFF2F5;
+  --topbar-navy: #00031F;
+  --footer: #39394D;
+  /* text */
+  --text-body: #222325;
+  --text-heading: #232333;
+  --text-nav: #666484;
+  --text-muted: #6E7680;
+  --text-label: #686F79;
+  --text-sidebar: #555B62;
+  --text-promo: #514F6E;
+  --text-disabled: #ADB1B8;
+  --input-border: #747487;
+  /* dividers */
+  --divider: #DFE3E8;
+  --divider-2: #EAEAEA;
+  /* in-meeting dark */
+  --stage-bg: #0D0D0D;
+  --panel-bg: #1D1E20;
+  --toolbar-bg: #080808;
+  --panel-divider: #2A2B2D;
+  --camoff-tile: #8B8B8B;
+  --camoff-icon: #D2D2D2;
+  --avatar-purple: #8F44AD;
+  --end-red: #FF0055;
+  --muted-red: #FF6682;
+  /* fonts */
+  --font-body: Lato, "Helvetica Neue", Helvetica, Arial, sans-serif;
+}

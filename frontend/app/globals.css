@@ -1,0 +1,49 @@
+@import "tailwindcss";
+@import "../styles/tokens.css";
+
+@theme inline {
+  --color-blue-button: var(--blue-button);
+  --color-blue-tile: var(--blue-tile);
+  --color-blue-web-tile: var(--blue-web-tile);
+  --color-blue-logo: var(--blue-logo);
+  --color-blue-chat: var(--blue-chat);
+  --color-orange-new: var(--orange-new);
+  --color-orange-host: var(--orange-host);
+  --color-sidebar-web: var(--sidebar-web);
+  --color-sidebar-selected: var(--sidebar-selected);
+  --color-sidebar-wp: var(--sidebar-wp);
+  --color-search-fill: var(--search-fill);
+  --color-white: var(--white);
+  --color-blue-tint: var(--blue-tint);
+  --color-blue-border: var(--blue-border);
+  --color-promo-green: var(--promo-green);
+  --color-icon-pink: var(--icon-pink);
+  --color-topbar-navy: var(--topbar-navy);
+  --color-footer: var(--footer);
+  --color-text-body: var(--text-body);
+  --color-text-heading: var(--text-heading);
+  --color-text-nav: var(--text-nav);
+  --color-text-muted: var(--text-muted);
+  --color-text-label: var(--text-label);
+  --color-text-sidebar: var(--text-sidebar);
+  --color-text-promo: var(--text-promo);
+  --color-text-disabled: var(--text-disabled);
+  --color-input-border: var(--input-border);
+  --color-divider: var(--divider);
+  --color-divider-2: var(--divider-2);
+  --color-stage-bg: var(--stage-bg);
+  --color-panel-bg: var(--panel-bg);
+  --color-toolbar-bg: var(--toolbar-bg);
+  --color-panel-divider: var(--panel-divider);
+  --color-camoff-tile: var(--camoff-tile);
+  --color-camoff-icon: var(--camoff-icon);
+  --color-avatar-purple: var(--avatar-purple);
+  --color-end-red: var(--end-red);
+  --color-muted-red: var(--muted-red);
+}
+
+body {
+  background: var(--white);
+  color: var(--text-body);
+  font-family: var(--font-body);
+}
