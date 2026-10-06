@@ -7,7 +7,14 @@ export const formatMeetingId = (id: string | null | undefined): string => {
 };
 
 export const formatMeetingTime = (dateStr: string | Date): string => {
-  const date = new Date(dateStr);
+  let validDateStr = dateStr;
+  if (typeof dateStr === 'string' && !dateStr.endsWith('Z') && dateStr.includes('T')) {
+    // If there's no timezone info (Z or +00:00), append Z
+    if (!dateStr.match(/(Z|[+-]\d{2}:\d{2})$/)) {
+      validDateStr = `${dateStr}Z`;
+    }
+  }
+  const date = new Date(validDateStr);
   const now = new Date();
   
   const isToday = 
