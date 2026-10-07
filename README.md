@@ -58,7 +58,6 @@ A fully functional web-based video conferencing application inspired by Zoom. Th
 
 The backend uses a relational database structure.
 
-```mermaid
 erDiagram
   users ||--o{ meetings : hosts
   users ||--o{ participants : "joins as"
@@ -93,7 +92,7 @@ erDiagram
     datetime joined_at
     datetime left_at
   }
-```
+
 
 *Note: Indexes are placed on `meetings.meeting_code` and `meetings.scheduled_start` for quick lookups.*
 
