@@ -19,9 +19,21 @@ function getInitials(name: string) {
 export default function VideoTile({ participant }: { participant: TileParticipant }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
+  // Set srcObject only when the stream reference changes — never on every render.
+  // The <video> is always present in the DOM so srcObject is never lost due to
+  // conditional mounting / grid layout changes.
   useEffect(() => {
-    if (videoRef.current && participant.stream && videoRef.current.srcObject !== participant.stream) {
-      videoRef.current.srcObject = participant.stream;
+    const video = videoRef.current;
+    if (!video) return;
+    const next = participant.stream ?? null;
+    if (video.srcObject !== next) {
+      video.srcObject = next;
+      if (next) {
+        video.play().catch(() => {
+          // Autoplay was blocked — do nothing; the muted attribute makes this
+          // extremely rare for self-view, but we swallow the error gracefully.
+        });
+      }
     }
   }, [participant.stream]);
 
@@ -31,17 +43,18 @@ export default function VideoTile({ participant }: { participant: TileParticipan
 
   return (
     <div className="relative h-full w-full overflow-hidden rounded-[12px] bg-[var(--camoff-tile)] flex items-center justify-center border border-transparent hover:border-[#444] transition-colors">
-      
-      {participant.isMe && participant.stream && (
-        <video
-          ref={videoRef}
-          autoPlay
-          muted
-          playsInline
-          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-200 ${showVideo ? 'opacity-100' : 'opacity-0'}`}
-          style={{ transform: 'scaleX(-1)' }} // mirror for self-view
-        />
-      )}
+
+      {/* Always rendered — hidden via opacity/visibility so srcObject is never lost */}
+      <video
+        ref={videoRef}
+        autoPlay
+        muted
+        playsInline
+        className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-200 ${
+          showVideo ? 'opacity-100' : 'opacity-0 pointer-events-none'
+        }`}
+        style={{ transform: participant.isMe ? 'scaleX(-1)' : undefined }}
+      />
 
       {!showVideo && (
         <div className="absolute inset-0 flex items-center justify-center bg-[var(--camoff-tile)] z-10">
