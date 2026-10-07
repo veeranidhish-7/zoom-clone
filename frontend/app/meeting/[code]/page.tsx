@@ -32,6 +32,7 @@ function MeetingRoomContent() {
   // ── Local media ───────────────────────────────────────────────────────────
   const {
     stream,
+    streamVersion,
     isMuted,
     isVideoOff,
     toggleMute,
@@ -163,6 +164,7 @@ function MeetingRoomContent() {
         isMuted: myIsMuted,
         isVideoOff: myIsVideoOff,
         stream,
+        streamVersion,
       }
     : null;
 

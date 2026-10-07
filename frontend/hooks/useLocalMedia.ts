@@ -12,18 +12,26 @@ export function useLocalMedia({ requestMedia, onError }: UseLocalMediaOptions) {
   const [isMuted, setIsMuted] = useState(true);
   const [isVideoOff, setIsVideoOff] = useState(!requestMedia);
   const [permissionDenied, setPermissionDenied] = useState(false);
+  // Incremented whenever we add/remove video tracks so VideoTile re-binds srcObject.
+  const [streamVersion, setStreamVersion] = useState(0);
 
-  // Keep stream in a ref so it survives renders without being a dep.
   const streamRef = useRef<MediaStream | null>(null);
+  const isMutedRef = useRef(true);
+  const isVideoOffRef = useRef(!requestMedia);
 
-  // Stable ref for onError so fetchMedia never needs to re-create.
+  // Keep refs in sync with state so stable callbacks read current values.
+  useEffect(() => { isMutedRef.current = isMuted; }, [isMuted]);
+  useEffect(() => { isVideoOffRef.current = isVideoOff; }, [isVideoOff]);
+
+  // Stable ref for onError — updated each render, never changes identity.
   const onErrorRef = useRef(onError);
   useEffect(() => { onErrorRef.current = onError; });
 
-  // fetchMedia has NO deps — it reads everything through refs.
-  // This prevents the acquisition effect from re-running on every render
-  // caused by the 3-second participants poll.
-  const fetchMedia = useCallback(async (): Promise<MediaStream | null> => {
+  // ── Helpers ───────────────────────────────────────────────────────────────
+
+  // Acquire the initial combined audio+video stream.
+  // Stable (empty deps): reads everything through refs.
+  const acquireStream = useCallback(async (): Promise<MediaStream | null> => {
     if (streamRef.current) return streamRef.current;
     try {
       const ms = await navigator.mediaDevices.getUserMedia({
@@ -42,9 +50,9 @@ export function useLocalMedia({ requestMedia, onError }: UseLocalMediaOptions) {
       onErrorRef.current?.(msg);
       return null;
     }
-  }, []); // intentionally empty — stable for the lifetime of the hook
+  }, []); // stable
 
-  // ── Acquire media ONCE per room visit ─────────────────────────────────────
+  // ── Acquire ONCE per room visit ───────────────────────────────────────────
   useEffect(() => {
     if (!requestMedia) {
       setIsMuted(true);
@@ -54,10 +62,9 @@ export function useLocalMedia({ requestMedia, onError }: UseLocalMediaOptions) {
 
     let cancelled = false;
 
-    fetchMedia().then((ms) => {
+    acquireStream().then((ms) => {
       if (cancelled) {
-        // React StrictMode double-mount: stop the just-acquired tracks and
-        // clear the ref so the second mount can re-acquire cleanly.
+        // StrictMode double-mount: release and clear so second mount re-acquires.
         ms?.getTracks().forEach((t) => t.stop());
         streamRef.current = null;
         setStream(null);
@@ -67,16 +74,16 @@ export function useLocalMedia({ requestMedia, onError }: UseLocalMediaOptions) {
         // Start muted, video on.
         ms.getAudioTracks().forEach((t) => { t.enabled = false; });
         setIsMuted(true);
+        isMutedRef.current = true;
         setIsVideoOff(false);
+        isVideoOffRef.current = false;
       }
     });
 
-    return () => {
-      cancelled = true;
-    };
-  }, [requestMedia, fetchMedia]); // fetchMedia is stable → runs once
+    return () => { cancelled = true; };
+  }, [requestMedia, acquireStream]); // acquireStream is stable → runs once
 
-  // ── Stop all tracks only when the room unmounts ───────────────────────────
+  // ── Stop everything when the room unmounts ────────────────────────────────
   useEffect(() => {
     return () => {
       streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -84,43 +91,108 @@ export function useLocalMedia({ requestMedia, onError }: UseLocalMediaOptions) {
     };
   }, []);
 
-  // ── Toggles: set track.enabled — never stop/restart a track ──────────────
+  // ── Mic toggle: track.enabled only (light stays on while cam is active) ───
   const toggleMute = useCallback(async () => {
     let ms = streamRef.current;
     if (!ms) {
-      ms = await fetchMedia();
-      // New stream: enforce current video state before unmuting
-      if (ms && isVideoOff) ms.getVideoTracks().forEach((t) => { t.enabled = false; });
+      ms = await acquireStream();
+      if (ms) {
+        // New stream: enforce current video state.
+        if (isVideoOffRef.current) ms.getVideoTracks().forEach((t) => { t.enabled = false; });
+      }
     }
-    if (!ms) return isMuted; // permission denied
+    if (!ms) return isMutedRef.current; // permission denied
 
-    const next = !isMuted;
+    const next = !isMutedRef.current;
     ms.getAudioTracks().forEach((t) => { t.enabled = !next; });
     setIsMuted(next);
     return next;
-  }, [isMuted, isVideoOff, fetchMedia]);
+  }, [acquireStream]);
 
+  // ── Video toggle: stop/release track OFF, re-acquire track ON ────────────
+  // This is what turns the browser camera indicator light on and off.
   const toggleVideo = useCallback(async () => {
-    let ms = streamRef.current;
-    if (!ms) {
-      ms = await fetchMedia();
-      // New stream: enforce current mute state before showing video
-      if (ms && isMuted) ms.getAudioTracks().forEach((t) => { t.enabled = false; });
+    const ms = streamRef.current;
+
+    if (!isVideoOffRef.current) {
+      // ── Turn camera OFF ──────────────────────────────────────────────────
+      // Stop and remove the video track so the OS releases the camera.
+      if (ms) {
+        ms.getVideoTracks().forEach((t) => {
+          t.stop();
+          ms.removeTrack(t);
+        });
+        // Bump version so VideoTile re-calls srcObject = stream (same object,
+        // updated track list).
+        setStreamVersion((v) => v + 1);
+      }
+      setIsVideoOff(true);
+      isVideoOffRef.current = true;
+      return true; // new isVideoOff value
+
+    } else {
+      // ── Turn camera ON ───────────────────────────────────────────────────
+      // Acquire a fresh video-only track and add it to the existing stream.
+      // The audio track is untouched.
+      try {
+        const videoStream = await navigator.mediaDevices.getUserMedia({
+          video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+        });
+        const [videoTrack] = videoStream.getVideoTracks();
+
+        if (!videoTrack) {
+          onErrorRef.current?.('No camera found');
+          return isVideoOffRef.current;
+        }
+
+        if (ms) {
+          ms.addTrack(videoTrack);
+          setStreamVersion((v) => v + 1);
+        } else {
+          // No stream yet (user joined without cam then enabled it) — create one.
+          const newMs = await acquireStream();
+          if (!newMs) return true; // still off
+          // acquireStream already sets streamRef and stream state.
+          // Enforce mute state on new audio tracks.
+          if (isMutedRef.current) {
+            newMs.getAudioTracks().forEach((t) => { t.enabled = false; });
+          }
+          setStreamVersion((v) => v + 1);
+          setIsVideoOff(false);
+          isVideoOffRef.current = false;
+          return false;
+        }
+
+        setIsVideoOff(false);
+        isVideoOffRef.current = false;
+        return false; // new isVideoOff value
+
+      } catch (err) {
+        const msg =
+          err instanceof Error && err.name === 'NotFoundError'
+            ? 'No camera found'
+            : 'Camera permission denied';
+        onErrorRef.current?.(msg);
+        return isVideoOffRef.current; // unchanged
+      }
     }
-    if (!ms) return isVideoOff;
+  }, [acquireStream]);
 
-    const next = !isVideoOff;
-    ms.getVideoTracks().forEach((t) => { t.enabled = !next; });
-    setIsVideoOff(next);
-    return next;
-  }, [isVideoOff, isMuted, fetchMedia]);
-
-  // stopAll is called only when the user explicitly leaves the room.
+  // ── stopAll: called only when the user explicitly leaves ──────────────────
   const stopAll = useCallback(() => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
     setStream(null);
   }, []);
 
-  return { stream, isMuted, isVideoOff, permissionDenied, toggleMute, toggleVideo, stopAll };
+  return {
+    stream,
+    streamVersion, // pass to VideoTile so it re-binds srcObject on track changes
+    isMuted,
+    isVideoOff,
+    permissionDenied,
+    toggleMute,
+    toggleVideo,
+    stopAll,
+  };
 }

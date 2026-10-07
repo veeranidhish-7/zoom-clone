@@ -9,7 +9,8 @@ export interface TileParticipant {
   isMe?: boolean;
   isMuted: boolean;
   isVideoOff: boolean;
-  stream?: MediaStream | null; // only for "Me" tile
+  stream?: MediaStream | null;       // only for "Me" tile
+  streamVersion?: number;            // bumped when tracks are added/removed
 }
 
 function getInitials(name: string) {
@@ -19,23 +20,23 @@ function getInitials(name: string) {
 export default function VideoTile({ participant }: { participant: TileParticipant }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
-  // Set srcObject only when the stream reference changes — never on every render.
-  // The <video> is always present in the DOM so srcObject is never lost due to
-  // conditional mounting / grid layout changes.
+  // Re-bind srcObject whenever the stream object changes OR whenever tracks
+  // are added/removed in-place (signalled by streamVersion).
+  // The <video> is always in the DOM so srcObject survives grid layout changes.
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
     const next = participant.stream ?? null;
-    if (video.srcObject !== next) {
-      video.srcObject = next;
-      if (next) {
-        video.play().catch(() => {
-          // Autoplay was blocked — do nothing; the muted attribute makes this
-          // extremely rare for self-view, but we swallow the error gracefully.
-        });
-      }
+    // Always reassign when version ticks — even if the object reference is the
+    // same — so the browser picks up the updated track list.
+    video.srcObject = next;
+    if (next) {
+      video.play().catch(() => {
+        // Swallow: muted autoplay is almost never blocked, but just in case.
+      });
     }
-  }, [participant.stream]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [participant.stream, participant.streamVersion]);
 
   const showVideo = participant.isMe
     ? !!participant.stream && !participant.isVideoOff
@@ -44,7 +45,7 @@ export default function VideoTile({ participant }: { participant: TileParticipan
   return (
     <div className="relative h-full w-full overflow-hidden rounded-[12px] bg-[var(--camoff-tile)] flex items-center justify-center border border-transparent hover:border-[#444] transition-colors">
 
-      {/* Always rendered — hidden via opacity/visibility so srcObject is never lost */}
+      {/* Always rendered — hidden via opacity so srcObject is never lost */}
       <video
         ref={videoRef}
         autoPlay
@@ -64,7 +65,7 @@ export default function VideoTile({ participant }: { participant: TileParticipan
         </div>
       )}
 
-      {/* Name label bottom-center */}
+      {/* Name label */}
       <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-2 rounded bg-black/70 px-3 py-1.5 text-xs text-white z-20 shadow-sm backdrop-blur-sm">
         {participant.isMuted && (
           <svg className="text-[var(--muted-red)] shrink-0" xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" viewBox="0 0 16 16">
