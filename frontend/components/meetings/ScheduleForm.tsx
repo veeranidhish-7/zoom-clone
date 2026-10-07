@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
+import { FormRow, TextInput, SelectInput } from '@/components/ui/FormUI';
 
 interface ScheduleFormProps {
   initialData?: {
@@ -19,7 +20,6 @@ interface ScheduleFormProps {
 export const ScheduleForm: React.FC<ScheduleFormProps> = ({ initialData, onSuccess, onCancel }) => {
   const router = useRouter();
   
-  // Format initial date/time for inputs
   const initialDateStr = initialData?.scheduled_start 
     ? (initialData.scheduled_start.match(/(Z|[+-]\d{2}:\d{2})$/) ? initialData.scheduled_start : `${initialData.scheduled_start}Z`)
     : '';
@@ -56,7 +56,6 @@ export const ScheduleForm: React.FC<ScheduleFormProps> = ({ initialData, onSucce
     e.preventDefault();
     setErrors({});
     
-    // Validation
     const newErrors: any = {};
     if (!topic.trim()) newErrors.topic = 'Topic is required';
     
@@ -104,109 +103,82 @@ export const ScheduleForm: React.FC<ScheduleFormProps> = ({ initialData, onSucce
   };
 
   return (
-    <div className="max-w-3xl w-full text-sm">
+    <div className="w-full text-sm">
       {toast && (
-        <div className="fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow-lg z-50">
+        <div className="fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50">
           {toast}
         </div>
       )}
       
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit} className="flex flex-col">
         {errors.api && <div className="text-red-500 mb-4">{errors.api}</div>}
         
-        {/* Topic */}
-        <div className="flex flex-col md:flex-row md:items-start">
-          <label className="w-48 pt-2 text-[var(--text-body)] font-medium">Topic</label>
-          <div className="flex-1">
-            <input 
-              type="text" 
-              value={topic}
-              onChange={(e) => setTopic(e.target.value)}
-              className="w-full border border-[var(--input-border)] rounded px-3 py-2 focus:outline-none focus:border-[var(--blue-button)]"
-            />
-            {errors.topic && <p className="text-red-500 text-xs mt-1">{errors.topic}</p>}
-          </div>
-        </div>
+        <FormRow label="Topic" required error={errors.topic}>
+          <TextInput 
+            value={topic}
+            onChange={(e) => setTopic(e.target.value)}
+          />
+        </FormRow>
 
-        {/* Description */}
-        <div className="flex flex-col md:flex-row md:items-start">
-          <label className="w-48 pt-2 text-[var(--text-body)] font-medium">Description</label>
-          <div className="flex-1">
-            <textarea 
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="w-full border border-[var(--input-border)] rounded px-3 py-2 h-20 focus:outline-none focus:border-[var(--blue-button)]"
-            />
-          </div>
-        </div>
+        <FormRow label="Description">
+          <textarea 
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            className="w-full border border-[var(--divider)] hover:border-gray-400 focus:border-[var(--blue-button)] focus:ring-1 focus:ring-[var(--blue-button)] rounded-lg px-3 py-2.5 h-24 text-sm outline-none transition-colors resize-y"
+            placeholder="Add description"
+          />
+        </FormRow>
 
-        {/* When */}
-        <div className="flex flex-col md:flex-row md:items-start">
-          <label className="w-48 pt-2 text-[var(--text-body)] font-medium">When</label>
-          <div className="flex-1">
-            <div className="flex gap-4 items-center">
+        <FormRow label="When" error={errors.start}>
+          <div className="flex gap-4 items-center">
+            <div className="relative w-48">
               <input 
                 type="date" 
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="border border-[var(--input-border)] rounded px-3 py-2 focus:outline-none focus:border-[var(--blue-button)]"
+                className="w-full border border-[var(--divider)] hover:border-gray-400 focus:border-[var(--blue-button)] focus:ring-1 focus:ring-[var(--blue-button)] rounded-lg px-3 py-2.5 text-sm outline-none transition-colors bg-white [&::-webkit-calendar-picker-indicator]:opacity-50 [&::-webkit-calendar-picker-indicator]:cursor-pointer"
               />
+            </div>
+            <div className="relative w-32">
               <input 
                 type="time" 
                 value={time}
                 onChange={(e) => setTime(e.target.value)}
-                className="border border-[var(--input-border)] rounded px-3 py-2 focus:outline-none focus:border-[var(--blue-button)]"
+                className="w-full border border-[var(--divider)] hover:border-gray-400 focus:border-[var(--blue-button)] focus:ring-1 focus:ring-[var(--blue-button)] rounded-lg px-3 py-2.5 text-sm outline-none transition-colors bg-white [&::-webkit-calendar-picker-indicator]:opacity-50 [&::-webkit-calendar-picker-indicator]:cursor-pointer"
               />
             </div>
-            {errors.start && <p className="text-red-500 text-xs mt-1">{errors.start}</p>}
           </div>
-        </div>
+        </FormRow>
 
-        {/* Duration */}
-        <div className="flex flex-col md:flex-row md:items-center">
-          <label className="w-48 text-[var(--text-body)] font-medium">Duration</label>
-          <div className="flex-1 flex gap-2 items-center">
-            <select 
-              value={hours} 
-              onChange={(e) => setHours(Number(e.target.value))}
-              className="border border-[var(--input-border)] rounded px-3 py-2 bg-white w-24"
-            >
-              {[0,1,2,3,4,5,6,7,8,9,10,11,12].map(h => <option key={h} value={h}>{h}</option>)}
-            </select>
-            <span className="text-[var(--text-body)]">hr</span>
+        <FormRow label="Duration" error={errors.duration}>
+          <div className="flex gap-3 items-center">
+            <div className="flex items-center gap-2">
+              <SelectInput value={hours} onChange={(e) => setHours(Number(e.target.value))} className="w-20">
+                {[0,1,2,3,4,5,6,7,8,9,10,11,12].map(h => <option key={h} value={h}>{h}</option>)}
+              </SelectInput>
+              <span className="text-[var(--text-body)]">hr</span>
+            </div>
             
-            <select 
-              value={minutes} 
-              onChange={(e) => setMinutes(Number(e.target.value))}
-              className="border border-[var(--input-border)] rounded px-3 py-2 bg-white w-24 ml-2"
-            >
-              {[0,15,30,45, 40].sort((a,b) => a-b).map(m => <option key={m} value={m}>{m}</option>)}
-            </select>
-            <span className="text-[var(--text-body)]">min</span>
+            <div className="flex items-center gap-2">
+              <SelectInput value={minutes} onChange={(e) => setMinutes(Number(e.target.value))} className="w-20">
+                {[0,15,30,40,45].sort((a,b) => a-b).map(m => <option key={m} value={m}>{m}</option>)}
+              </SelectInput>
+              <span className="text-[var(--text-body)]">min</span>
+            </div>
           </div>
-        </div>
-        {errors.duration && (
-          <div className="flex flex-col md:flex-row">
-            <div className="w-48"></div>
-            <p className="text-red-500 text-xs mt-1">{errors.duration}</p>
-          </div>
-        )}
+        </FormRow>
 
-        {/* Time Zone */}
-        <div className="flex flex-col md:flex-row md:items-center">
-          <label className="w-48 text-[var(--text-body)] font-medium">Time Zone</label>
-          <div className="flex-1">
-            <select disabled className="border border-[var(--input-border)] rounded px-3 py-2 bg-gray-50 text-[var(--text-muted)] w-64">
-              <option>{timeZone || 'Loading...'}</option>
-            </select>
-          </div>
-        </div>
+        <FormRow label="Time Zone">
+          <SelectInput disabled className="w-80 bg-gray-50 text-[var(--text-muted)] cursor-not-allowed">
+            <option>{timeZone || 'Loading...'}</option>
+          </SelectInput>
+        </FormRow>
 
-        <div className="pt-6 mt-6 border-t border-[var(--divider)] flex gap-4">
+        <div className="pt-6 mt-6 border-t border-[var(--divider)] flex gap-4 md:pl-[200px]">
           <button 
             type="submit" 
             disabled={isSubmitting}
-            className="bg-[var(--blue-button)] text-white px-6 py-2 rounded font-medium hover:opacity-90 transition disabled:opacity-50"
+            className="bg-[var(--blue-button)] text-white px-8 py-2.5 rounded-full font-medium hover:opacity-90 active:scale-95 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--blue-button)] transition-all disabled:opacity-50 text-sm"
           >
             Save
           </button>
@@ -217,7 +189,7 @@ export const ScheduleForm: React.FC<ScheduleFormProps> = ({ initialData, onSucce
               else router.back();
             }}
             disabled={isSubmitting}
-            className="bg-[#F5F5F5] text-[var(--text-body)] border border-[var(--divider)] px-6 py-2 rounded font-medium hover:bg-gray-200 transition"
+            className="bg-transparent text-[var(--blue-button)] border border-transparent px-8 py-2.5 rounded-full font-medium hover:bg-blue-50 active:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-[var(--blue-button)] transition-all disabled:opacity-50 text-sm"
           >
             Cancel
           </button>

@@ -17,7 +17,7 @@ export function ActionTile({ label, icon, color, onClick, loading, hasDropdown }
       <button
         onClick={onClick}
         disabled={loading}
-        className="w-[72px] h-[72px] rounded-2xl flex items-center justify-center text-white transition-transform active:scale-95 disabled:opacity-80 disabled:active:scale-100 hover:brightness-110"
+        className="w-[72px] h-[72px] rounded-2xl flex items-center justify-center text-white transition-all active:scale-95 disabled:opacity-80 disabled:active:scale-100 hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-400"
         style={{ backgroundColor: color, boxShadow: "0 2px 8px rgba(0,0,0,0.08)" }}
       >
         {loading ? (

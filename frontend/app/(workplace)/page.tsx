@@ -71,10 +71,10 @@ export default function WorkplaceHome() {
 
       {/* Meeting Lists */}
       <div className="w-full flex flex-col md:flex-row gap-6 mt-6">
-        <div className="flex-1">
+        <div className="flex-1 min-w-0">
           <MeetingList type="upcoming" />
         </div>
-        <div className="flex-1">
+        <div className="flex-1 min-w-0">
           <MeetingList type="recent" />
         </div>
       </div>

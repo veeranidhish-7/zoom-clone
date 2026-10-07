@@ -67,7 +67,7 @@ export function JoinModal({ onClose }: JoinModalProps) {
       >
         <div className="px-6 py-4 border-b border-[var(--divider)] flex justify-between items-center">
           <h2 className="text-lg font-medium text-[var(--text-heading)]">Join Meeting</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 active:scale-95 focus:outline-none focus:ring-2 focus:ring-[var(--blue-button)] rounded-full p-1 transition-all">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
           </button>
         </div>
@@ -102,14 +102,14 @@ export function JoinModal({ onClose }: JoinModalProps) {
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-lg border border-[var(--divider)] font-medium text-sm hover:bg-gray-50 text-[var(--text-body)]"
+              className="px-4 py-2 rounded-lg border border-[var(--divider)] font-medium text-sm hover:bg-gray-50 active:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-[var(--blue-button)] text-[var(--text-body)] transition-all"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={!meetingId.trim() || loading}
-              className="px-6 py-2 rounded-lg bg-[var(--blue-button)] text-white font-medium text-sm disabled:opacity-50 hover:bg-blue-700 transition-colors flex items-center gap-2"
+              className="px-6 py-2 rounded-lg bg-[var(--blue-button)] text-white font-medium text-sm disabled:opacity-50 hover:bg-blue-700 active:scale-95 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--blue-button)] transition-all flex items-center gap-2"
             >
               {loading && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
               Join

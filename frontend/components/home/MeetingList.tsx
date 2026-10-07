@@ -32,12 +32,12 @@ export function MeetingList({ type }: MeetingListProps) {
   const title = type === "upcoming" ? "Upcoming Meetings" : "Recent Activity";
 
   return (
-    <div className="bg-white rounded-xl border border-[var(--divider)] p-4 shadow-sm w-full">
+    <div className="bg-white rounded-xl border border-[var(--divider)] p-4 shadow-sm w-full h-full flex flex-col">
       <div className="flex items-center justify-between mb-4">
         <h2 className="font-medium text-lg text-[var(--text-heading)]">{title}</h2>
       </div>
 
-      <div className="flex flex-col">
+      <div className="flex flex-col flex-1">
         {loading ? (
           <div className="flex flex-col gap-4 py-4">
             {[1, 2].map((i) => (
@@ -60,7 +60,7 @@ export function MeetingList({ type }: MeetingListProps) {
           </div>
         ) : (
           <div className="flex flex-col">
-            {meetings.map((m) => (
+            {meetings.slice(0, 5).map((m) => (
               <MeetingRow key={m.id} meeting={m} />
             ))}
           </div>
