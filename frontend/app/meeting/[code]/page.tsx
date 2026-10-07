@@ -1,18 +1,23 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { api, ApiError, leaveMeetingBeacon } from '@/lib/api';
 import { useMeetingContext } from '@/hooks/useMeetingContext';
 import { useParticipants } from '@/hooks/useParticipants';
 import { useLocalMedia } from '@/hooks/useLocalMedia';
+import { useScreenShare } from '@/hooks/useScreenShare';
 import { useToast } from '@/components/ui/useToast';
 import VideoGrid from '@/components/meeting/VideoGrid';
 import Toolbar from '@/components/meeting/Toolbar';
 import ParticipantsPanel from '@/components/meeting/ParticipantsPanel';
 import ChatPanel from '@/components/meeting/ChatPanel';
 import EndMenu from '@/components/meeting/EndMenu';
+import InviteDialog from '@/components/meeting/InviteDialog';
+import EmojiOverlay from '@/components/meeting/EmojiOverlay';
 import type { TileParticipant } from '@/components/meeting/VideoTile';
+
+interface Reaction { id: number; emoji: string; }
 
 function MeetingRoomContent() {
   const { code } = useParams();
@@ -20,7 +25,7 @@ function MeetingRoomContent() {
   const meetingCode = (Array.isArray(code) ? code[0] : code) ?? '';
   const { toast: addToast } = useToast();
 
-  const { participant: myParticipant, meeting, camRequested, clear } = useMeetingContext();
+  const { participant: myParticipant, meeting, camRequested } = useMeetingContext();
 
   // ── Redirect to join if we have no join context ───────────────────────────
   useEffect(() => {
@@ -43,29 +48,64 @@ function MeetingRoomContent() {
     onError: (msg) => addToast(msg, 'error'),
   });
 
+  // ── Screen share ──────────────────────────────────────────────────────────
+  const { shareStream, isSharing, startShare, stopShare } = useScreenShare({
+    onError: (msg) => addToast(msg, 'error'),
+  });
+
   // ── Room state ────────────────────────────────────────────────────────────
   const [activePanel, setActivePanel] = useState<'participants' | 'chat' | null>(null);
   const [showEndMenu, setShowEndMenu] = useState(false);
+  const [showInvite, setShowInvite] = useState(false);
   const [timer, setTimer] = useState(0);
+  const [reactions, setReactions] = useState<Reaction[]>([]);
 
   // Sync backend mute/video state optimistically
   const [myIsMuted, setMyIsMuted] = useState(myParticipant?.is_muted ?? true);
   const [myIsVideoOff, setMyIsVideoOff] = useState(myParticipant?.is_video_off ?? true);
 
-  // Keep them in sync with local media
   useEffect(() => { setMyIsMuted(isMuted); }, [isMuted]);
   useEffect(() => { setMyIsVideoOff(isVideoOff); }, [isVideoOff]);
+
+  // ── Keyboard shortcuts ────────────────────────────────────────────────────
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      // Alt+A → toggle mute
+      if (e.altKey && e.key.toLowerCase() === 'a') {
+        e.preventDefault();
+        handleToggleMute();
+        return;
+      }
+      // Alt+V → toggle video
+      if (e.altKey && e.key.toLowerCase() === 'v') {
+        e.preventDefault();
+        handleToggleVideo();
+        return;
+      }
+      // Esc → close dialogs / menus
+      if (e.key === 'Escape') {
+        setShowEndMenu(false);
+        setShowInvite(false);
+        // panels stay open (they have their own close buttons)
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // intentionally stable — uses refs via handlers below
 
   // ── Callbacks for participant events ──────────────────────────────────────
   const handleRemoved = useCallback(() => {
     stopMedia();
+    stopShare();
     router.push(`/meeting/${meetingCode}/ended?reason=${encodeURIComponent('You were removed by the host')}`);
-  }, [stopMedia, router, meetingCode]);
+  }, [stopMedia, stopShare, router, meetingCode]);
 
   const handleMeetingEnded = useCallback(() => {
     stopMedia();
+    stopShare();
     router.push(`/meeting/${meetingCode}/ended?reason=${encodeURIComponent('The host ended this meeting')}`);
-  }, [stopMedia, router, meetingCode]);
+  }, [stopMedia, stopShare, router, meetingCode]);
 
   // ── Participants polling ──────────────────────────────────────────────────
   const backendParticipants = useParticipants({
@@ -98,7 +138,7 @@ function MeetingRoomContent() {
   }, [meetingCode, myParticipant?.id]);
 
   // ── Mic / Video toggles ───────────────────────────────────────────────────
-  const handleToggleMute = async () => {
+  const handleToggleMute = useCallback(async () => {
     const next = await toggleMute();
     if (!myParticipant?.id) return;
     const prev = myIsMuted;
@@ -106,12 +146,12 @@ function MeetingRoomContent() {
     try {
       await api.updateParticipant(meetingCode, myParticipant.id, { is_muted: next });
     } catch {
-      setMyIsMuted(prev); // rollback
+      setMyIsMuted(prev);
       addToast('Failed to update mute state', 'error');
     }
-  };
+  }, [toggleMute, myParticipant?.id, myIsMuted, meetingCode, addToast]);
 
-  const handleToggleVideo = async () => {
+  const handleToggleVideo = useCallback(async () => {
     const next = await toggleVideo();
     if (!myParticipant?.id) return;
     const prev = myIsVideoOff;
@@ -119,15 +159,16 @@ function MeetingRoomContent() {
     try {
       await api.updateParticipant(meetingCode, myParticipant.id, { is_video_off: next });
     } catch {
-      setMyIsVideoOff(prev); // rollback
+      setMyIsVideoOff(prev);
       addToast('Failed to update video state', 'error');
     }
-  };
+  }, [toggleVideo, myParticipant?.id, myIsVideoOff, meetingCode, addToast]);
 
   // ── Leave / End ───────────────────────────────────────────────────────────
   const handleLeave = useCallback(async () => {
     if (!myParticipant?.id) return;
     stopMedia();
+    stopShare();
     try {
       await api.leaveMeeting(meetingCode, { participant_id: myParticipant.id });
     } catch (err) {
@@ -136,11 +177,12 @@ function MeetingRoomContent() {
       }
     }
     router.push(`/meeting/${meetingCode}/ended?reason=${encodeURIComponent('You left the meeting')}`);
-  }, [myParticipant?.id, meetingCode, stopMedia, router, addToast]);
+  }, [myParticipant?.id, meetingCode, stopMedia, stopShare, router, addToast]);
 
   const handleEndAll = useCallback(async () => {
     if (!myParticipant?.id) return;
     stopMedia();
+    stopShare();
     try {
       await api.leaveMeeting(meetingCode, { participant_id: myParticipant.id });
     } catch (err) {
@@ -149,12 +191,23 @@ function MeetingRoomContent() {
       }
     }
     router.push(`/meeting/${meetingCode}/ended?reason=${encodeURIComponent('You ended the meeting')}`);
-  }, [myParticipant?.id, meetingCode, stopMedia, router, addToast]);
+  }, [myParticipant?.id, meetingCode, stopMedia, stopShare, router, addToast]);
+
+  // ── Reactions ─────────────────────────────────────────────────────────────
+  const handleReaction = useCallback((emoji: string) => {
+    const id = Date.now();
+    setReactions((prev) => [...prev, { id, emoji }]);
+    setTimeout(() => setReactions((prev) => prev.filter((r) => r.id !== id)), 3200);
+  }, []);
+
+  // ── More menu ─────────────────────────────────────────────────────────────
+  const handleMoreItem = useCallback((label: string) => {
+    addToast(`"${label}" is not available in this demo`, 'info');
+  }, [addToast]);
 
   // ── Build tile list ───────────────────────────────────────────────────────
   const isHost = myParticipant?.role === 'host';
 
-  // Build the "Me" tile from local state (always first)
   const meTile: TileParticipant | null = myParticipant
     ? {
         id: myParticipant.id,
@@ -163,12 +216,12 @@ function MeetingRoomContent() {
         isMe: true,
         isMuted: myIsMuted,
         isVideoOff: myIsVideoOff,
-        stream,
+        // If sharing, show the screen share stream instead of the webcam
+        stream: isSharing ? shareStream : stream,
         streamVersion,
       }
     : null;
 
-  // Other participants from backend (exclude self)
   const otherTiles: TileParticipant[] = backendParticipants
     .filter((p) => p.id !== myParticipant?.id)
     .map((p) => ({
@@ -182,7 +235,6 @@ function MeetingRoomContent() {
 
   const allTiles: TileParticipant[] = meTile ? [meTile, ...otherTiles] : otherTiles;
 
-  // Participants for panel (full backend list + me merged)
   const panelParticipants = allTiles.map((t) => ({
     id: t.id,
     display_name: t.name,
@@ -191,11 +243,15 @@ function MeetingRoomContent() {
     is_video_off: t.isVideoOff,
   }));
 
-  // Don't render the room until context is confirmed
   if (!myParticipant) return null;
 
   return (
     <div className="flex h-screen w-screen flex-col bg-[var(--stage-bg)] font-[var(--font-body)] text-white overflow-hidden">
+      {/* Invite Dialog */}
+      {showInvite && (
+        <InviteDialog meetingCode={meetingCode} onClose={() => setShowInvite(false)} />
+      )}
+
       {/* Top Bar */}
       <div className="absolute top-0 left-0 w-full p-4 flex justify-between pointer-events-none z-10">
         <div className="flex items-center gap-2 rounded bg-black/40 px-3 py-1.5 backdrop-blur-sm pointer-events-auto">
@@ -206,18 +262,29 @@ function MeetingRoomContent() {
           <span className="text-[12px] font-medium">{meeting?.title || 'Meeting'}</span>
           <span className="text-[12px] text-gray-400 ml-2">{formatTimer(timer)}</span>
         </div>
-        <div className="pointer-events-auto">
-          <button className="rounded bg-black/40 px-3 py-1.5 backdrop-blur-sm text-[12px] font-medium flex items-center gap-2 hover:bg-black/60 transition">
-            View
-          </button>
-        </div>
+        {/* Screen share banner */}
+        {isSharing && (
+          <div className="pointer-events-auto flex items-center gap-2 rounded bg-[var(--promo-green)]/20 border border-[var(--promo-green)]/50 px-3 py-1.5 backdrop-blur-sm text-[var(--promo-green)] text-[12px] font-medium">
+            <span className="w-2 h-2 rounded-full bg-[var(--promo-green)] animate-pulse inline-block" />
+            You are sharing your screen
+            <button
+              onClick={stopShare}
+              aria-label="Stop sharing screen"
+              className="ml-2 rounded bg-[var(--end-red)] px-2 py-0.5 text-white text-[11px] hover:opacity-90 transition"
+            >
+              Stop
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Main Content Area */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Video Stage */}
-        <div className="flex-1 transition-all duration-300">
+        {/* Video Stage with emoji overlay on the first (Me) tile */}
+        <div className="flex-1 transition-all duration-300 relative">
           <VideoGrid participants={allTiles} />
+          {/* Floating emoji reactions — positioned over the local tile area */}
+          <EmojiOverlay reactions={reactions} />
         </div>
 
         {/* Side Panels */}
@@ -228,14 +295,15 @@ function MeetingRoomContent() {
             isHost={isHost}
             code={meetingCode}
             onClose={() => setActivePanel(null)}
+            onInvite={() => { setShowInvite(true); }}
           />
         )}
         {activePanel === 'chat' && (
           <ChatPanel
             onClose={() => setActivePanel(null)}
             participants={panelParticipants
-  .filter((p) => p.id !== myParticipant.id)
-  .map((p) => ({ id: p.id, name: p.display_name }))}
+              .filter((p) => p.id !== myParticipant.id)
+              .map((p) => ({ id: p.id, name: p.display_name }))}
           />
         )}
       </div>
@@ -251,6 +319,12 @@ function MeetingRoomContent() {
           onToggleParticipants={() => setActivePanel((p) => (p === 'participants' ? null : 'participants'))}
           onToggleChat={() => setActivePanel((p) => (p === 'chat' ? null : 'chat'))}
           onEndClick={() => setShowEndMenu(!showEndMenu)}
+          onInvite={() => setShowInvite(true)}
+          onShare={startShare}
+          isSharing={isSharing}
+          onStopShare={stopShare}
+          onReaction={handleReaction}
+          onMoreItem={handleMoreItem}
         />
         {showEndMenu && (
           <EndMenu
