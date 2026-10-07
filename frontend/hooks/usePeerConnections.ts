@@ -22,6 +22,7 @@ interface Options {
   meetingCode: string;
   participantId: number | null;
   localStream: MediaStream | null;
+  localMediaReady: boolean;
   enabled: boolean;
   onError?: (msg: string) => void;
 }
@@ -32,6 +33,7 @@ export function usePeerConnections({
   meetingCode,
   participantId,
   localStream,
+  localMediaReady,
   enabled,
   onError,
 }: Options) {
@@ -53,6 +55,7 @@ export function usePeerConnections({
   const send = useCallback((msg: object) => {
     const ws = wsRef.current;
     if (ws && ws.readyState === WebSocket.OPEN) {
+      console.debug(`[rtc] Sending message: ${JSON.stringify(msg)}`);
       ws.send(JSON.stringify(msg));
     }
   }, []);
@@ -74,27 +77,49 @@ export function usePeerConnections({
   const createPc = useCallback((peerId: number): RTCPeerConnection => {
     const pc = new RTCPeerConnection({ iceServers: getIceServers() });
     pcsRef.current.set(peerId, pc);
+    console.debug(`[rtc] Peer connection created for ${peerId}`);
+
+    pc.onconnectionstatechange = () => {
+      console.debug(`[rtc] connectionState for ${peerId}: ${pc.connectionState}`);
+      if (pc.connectionState === 'failed') {
+        onErrorRef.current?.(`Connection to participant ${peerId} failed`);
+      }
+    };
+
+    pc.oniceconnectionstatechange = () => {
+      console.debug(`[rtc] iceConnectionState for ${peerId}: ${pc.iceConnectionState}`);
+    };
 
     // Add local tracks
     const stream = localStreamRef.current;
-    if (stream) stream.getTracks().forEach((t) => pc.addTrack(t, stream));
+    let tracksAdded = 0;
+    if (stream) {
+      stream.getTracks().forEach((t) => {
+        pc.addTrack(t, stream);
+        tracksAdded++;
+      });
+    } else {
+      pc.addTransceiver('video', { direction: 'recvonly' });
+      pc.addTransceiver('audio', { direction: 'recvonly' });
+    }
+    console.debug(`[rtc] Added ${tracksAdded} local tracks to connection ${peerId} (stream present: ${!!stream})`);
 
-    const remoteStream = new MediaStream();
     pc.ontrack = (ev) => {
-      (ev.streams[0] ?? { getTracks: () => [ev.track] })
-        .getTracks?.()
-        .forEach?.((t: MediaStreamTrack) => remoteStream.addTrack(t));
-      if (!remoteStream.getTracks().length) remoteStream.addTrack(ev.track);
+      console.debug(`[rtc] ontrack fired for ${peerId}, track kind: ${ev.track.kind}`);
+      let remoteStream = remoteStreamsRef.current.get(peerId);
+      if (!remoteStream) {
+        remoteStream = ev.streams && ev.streams[0] ? ev.streams[0] : new MediaStream();
+      }
+      if (!ev.streams || !ev.streams[0]) {
+        remoteStream.addTrack(ev.track);
+      }
       updateRemoteStream(peerId, remoteStream);
     };
 
     pc.onicecandidate = (ev) => {
-      if (ev.candidate) send({ type: 'ice', to: peerId, candidate: ev.candidate });
-    };
-
-    pc.onconnectionstatechange = () => {
-      if (pc.connectionState === 'failed') {
-        onErrorRef.current?.(`Connection to participant ${peerId} failed`);
+      if (ev.candidate) {
+        console.debug(`[rtc] Sending ICE candidate to ${peerId}`);
+        send({ type: 'ice', to: peerId, candidate: ev.candidate });
       }
     };
 
@@ -114,6 +139,7 @@ export function usePeerConnections({
   const handlePeers = useCallback(async (peers: number[]) => {
     for (const peerId of peers) {
       if (pcsRef.current.has(peerId)) continue;
+      console.debug(`[rtc] Creating offer for existing peer ${peerId}`);
       const pc = createPc(peerId);
       try {
         const offer = await pc.createOffer();
@@ -147,12 +173,14 @@ export function usePeerConnections({
   const handleIce = useCallback(async (from: number, candidate: RTCIceCandidateInit) => {
     const pc = pcsRef.current.get(from);
     if (!pc || !pc.remoteDescription) {
+      console.debug(`[rtc] Queueing ICE candidate from ${from} (no remote description yet)`);
       const cache = iceCacheRef.current.get(from) ?? [];
       cache.push(candidate);
       iceCacheRef.current.set(from, cache);
       return;
     }
-    try { await pc.addIceCandidate(new RTCIceCandidate(candidate)); } catch { /* ignore */ }
+    console.debug(`[rtc] Adding ICE candidate from ${from}`);
+    try { await pc.addIceCandidate(new RTCIceCandidate(candidate)); } catch (e) { console.warn('ICE add error', e); }
   }, []);
 
   const handlePeerLeft = useCallback((peerId: number) => {
@@ -162,14 +190,24 @@ export function usePeerConnections({
   // ── WebSocket setup ───────────────────────────────────────────────────────
 
   useEffect(() => {
-    if (!enabled || !participantId) return;
+    if (!enabled || !participantId || !localMediaReady) return;
+    if (wsRef.current) {
+      console.debug('[rtc] WebSocket already exists, skipping duplicate creation');
+      return;
+    }
 
     const ws = new WebSocket(wsUrl(meetingCode, participantId));
     wsRef.current = ws;
+    console.debug(`[rtc] WebSocket opened for participant ${participantId}`);
+
+    ws.onclose = () => {
+      console.debug(`[rtc] WebSocket closed for participant ${participantId}`);
+    };
 
     ws.onmessage = (ev) => {
       let msg: Record<string, unknown>;
       try { msg = JSON.parse(ev.data as string); } catch { return; }
+      console.debug(`[rtc] Received message: ${ev.data}`);
       const type = msg.type as string;
       if (type === 'peers')       handlePeers((msg.peers as number[]) ?? []);
       else if (type === 'offer')  handleOffer(msg.from as number, msg.sdp as RTCSessionDescriptionInit);
@@ -184,8 +222,9 @@ export function usePeerConnections({
     ws.onerror = () => onErrorRef.current?.('Signaling connection error');
 
     return () => {
+      console.debug(`[rtc] Cleaning up WebSocket and peer connections`);
       ws.close();
-      wsRef.current = null;
+      if (wsRef.current === ws) wsRef.current = null;
       pcsRef.current.forEach((pc) => pc.close());
       pcsRef.current.clear();
       iceCacheRef.current.clear();
@@ -193,7 +232,7 @@ export function usePeerConnections({
       setRemoteStreams(new Map());
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, participantId, meetingCode]);
+  }, [enabled, participantId, meetingCode, localMediaReady]);
 
   const closeAll = useCallback(() => {
     wsRef.current?.close();

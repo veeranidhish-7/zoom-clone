@@ -41,6 +41,7 @@ function MeetingRoomContent() {
     streamVersion,
     isMuted,
     isVideoOff,
+    isReady: localMediaReady,
     toggleMute,
     toggleVideo,
     stopAll: stopMedia,
@@ -59,6 +60,7 @@ function MeetingRoomContent() {
     meetingCode,
     participantId: myParticipant?.id ?? null,
     localStream: stream,
+    localMediaReady,
     enabled: !!myParticipant?.id,
     onError: (msg) => addToast(msg, 'error'),
   });

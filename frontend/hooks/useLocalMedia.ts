@@ -12,6 +12,7 @@ export function useLocalMedia({ requestMedia, onError }: UseLocalMediaOptions) {
   const [isMuted, setIsMuted] = useState(true);
   const [isVideoOff, setIsVideoOff] = useState(!requestMedia);
   const [permissionDenied, setPermissionDenied] = useState(false);
+  const [isReady, setIsReady] = useState(false);
   // Incremented whenever we add/remove video tracks so VideoTile re-binds srcObject.
   const [streamVersion, setStreamVersion] = useState(0);
 
@@ -57,6 +58,7 @@ export function useLocalMedia({ requestMedia, onError }: UseLocalMediaOptions) {
     if (!requestMedia) {
       setIsMuted(true);
       setIsVideoOff(true);
+      setIsReady(true);
       return;
     }
 
@@ -78,6 +80,7 @@ export function useLocalMedia({ requestMedia, onError }: UseLocalMediaOptions) {
         setIsVideoOff(false);
         isVideoOffRef.current = false;
       }
+      setIsReady(true);
     });
 
     return () => { cancelled = true; };
@@ -191,6 +194,7 @@ export function useLocalMedia({ requestMedia, onError }: UseLocalMediaOptions) {
     isMuted,
     isVideoOff,
     permissionDenied,
+    isReady,
     toggleMute,
     toggleVideo,
     stopAll,
