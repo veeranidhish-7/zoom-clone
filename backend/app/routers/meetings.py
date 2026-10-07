@@ -169,11 +169,11 @@ def join_meeting(
 
     display_name = body.display_name  # already stripped by validator
 
-    # Determine role: host if display_name matches host's name
+    # Determine role: host if body.is_host is true
     host = db.query(User).filter(User.id == meeting.host_id).first()
-    is_host = host and display_name.lower() == host.name.lower()
+    is_host = body.is_host
     role = "host" if is_host else "participant"
-    user_id = host.id if is_host else None
+    user_id = host.id if is_host and host else None
 
     # On first join: set status -> live and seed 3 mock participants
     active_count = (

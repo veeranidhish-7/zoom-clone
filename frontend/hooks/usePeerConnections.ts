@@ -30,6 +30,7 @@ interface Options {
   onPeerLeft?: (peerId: number) => void;
   onReconnecting?: () => void;
   onReconnectFailed?: () => void;
+  onChat?: (msg: { from: number; from_name: string; to: number | null; text: string; ts: string }) => void;
 }
 
 type RemoteStreams = Map<number, MediaStream>;
@@ -46,9 +47,11 @@ export function usePeerConnections({
   onPeerLeft,
   onReconnecting,
   onReconnectFailed,
+  onChat,
 }: Options) {
   const [remoteStreams, setRemoteStreams] = useState<RemoteStreams>(new Map());
   const [mediaStates, setMediaStates] = useState<Map<number, {video: boolean, audio: boolean}>>(new Map());
+  const [connectedPeers, setConnectedPeers] = useState<Set<number>>(new Set());
   const [retryCount, setRetryCount] = useState(0);
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -68,6 +71,7 @@ export function usePeerConnections({
   const onPeerLeftRef = useRef(onPeerLeft);
   const onReconnectingRef = useRef(onReconnecting);
   const onReconnectFailedRef = useRef(onReconnectFailed);
+  const onChatRef = useRef(onChat);
   
   useEffect(() => { 
     onErrorRef.current = onError;
@@ -75,6 +79,7 @@ export function usePeerConnections({
     onPeerLeftRef.current = onPeerLeft;
     onReconnectingRef.current = onReconnecting;
     onReconnectFailedRef.current = onReconnectFailed;
+    onChatRef.current = onChat;
   });
 
   const send = useCallback((msg: object) => {
@@ -102,6 +107,11 @@ export function usePeerConnections({
     pcsRef.current.delete(peerId);
     iceCacheRef.current.delete(peerId);
     updateRemoteStream(peerId, null);
+    setConnectedPeers((prev) => {
+      const next = new Set(prev);
+      next.delete(peerId);
+      return next;
+    });
   }, [updateRemoteStream]);
 
   const createPc = useCallback((peerId: number): RTCPeerConnection => {
@@ -163,6 +173,11 @@ export function usePeerConnections({
   }, []);
 
   const handlePeers = useCallback(async (peers: number[]) => {
+    setConnectedPeers((prev) => {
+      const next = new Set(prev);
+      peers.forEach((p) => next.add(p));
+      return next;
+    });
     for (const peerId of peers) {
       if (pcsRef.current.has(peerId)) continue;
       const pc = createPc(peerId);
@@ -253,6 +268,11 @@ export function usePeerConnections({
       else if (type === 'peer-left' || type === 'peer-joined') {
         if (type === 'peer-left') handlePeerLeft(msg.id as number);
         if (type === 'peer-joined') {
+          setConnectedPeers((prev) => {
+            const next = new Set(prev);
+            next.add(msg.id as number);
+            return next;
+          });
           const lms = localMediaStateRef.current;
           send({ type: 'media-state', to: msg.id, video: lms.video, audio: lms.audio });
         }
@@ -264,6 +284,14 @@ export function usePeerConnections({
           const next = new Map(prev);
           next.set(from, { video, audio });
           return next;
+        });
+      } else if (type === 'chat') {
+        onChatRef.current?.({
+          from: msg.from as number,
+          from_name: msg.from_name as string,
+          to: msg.to as number | null,
+          text: msg.text as string,
+          ts: msg.ts as string,
         });
       }
     };
@@ -297,7 +325,12 @@ export function usePeerConnections({
     remoteStreamsRef.current.clear();
     setRemoteStreams(new Map());
     setMediaStates(new Map());
+    setConnectedPeers(new Set());
   }, []);
 
-  return { remoteStreams, mediaStates, closeAll };
+  const sendChat = useCallback((text: string, to: number | null) => {
+    send({ type: 'chat', text, to });
+  }, [send]);
+
+  return { remoteStreams, mediaStates, connectedPeers, closeAll, sendChat };
 }

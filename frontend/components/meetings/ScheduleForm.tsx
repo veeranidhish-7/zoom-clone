@@ -90,6 +90,7 @@ export const ScheduleForm: React.FC<ScheduleFormProps> = ({ initialData, onSucce
         }, 1000);
       } else {
         const res: any = await api.createMeeting(payload);
+        localStorage.setItem('host_' + res.meeting_code, 'true');
         setToast('Meeting scheduled successfully');
         setTimeout(() => {
           if (onSuccess) onSuccess();

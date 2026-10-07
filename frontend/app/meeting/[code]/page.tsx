@@ -17,6 +17,7 @@ import EndMenu from '@/components/meeting/EndMenu';
 import InviteDialog from '@/components/meeting/InviteDialog';
 import EmojiOverlay from '@/components/meeting/EmojiOverlay';
 import type { TileParticipant } from '@/components/meeting/VideoTile';
+import type { ChatMessage } from '@/components/meeting/ChatPanel';
 
 interface Reaction { id: number; emoji: string; }
 
@@ -78,7 +79,27 @@ function MeetingRoomContent() {
   useEffect(() => { setMyIsMuted(isMuted); }, [isMuted]);
   useEffect(() => { setMyIsVideoOff(isVideoOff); }, [isVideoOff]);
 
-  const { remoteStreams, mediaStates, closeAll: closePeers } = usePeerConnections({
+  // ── Room state ────────────────────────────────────────────────────────────
+  const [activePanel, setActivePanel] = useState<'participants' | 'chat' | null>(null);
+
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [unreadChatCount, setUnreadChatCount] = useState(0);
+
+  const handleChat = useCallback((msg: { from: number; from_name: string; to: number | null; text: string; ts: string }) => {
+    setChatMessages((prev) => [...prev, {
+      id: msg.ts + Math.random(),
+      sender: msg.from_name,
+      text: msg.text,
+      time: new Date(msg.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      toAll: msg.to === null,
+      isMe: false,
+    }]);
+    if (activePanel !== 'chat') {
+      setUnreadChatCount((c) => c + 1);
+    }
+  }, [activePanel]);
+
+  const { remoteStreams, mediaStates, connectedPeers, closeAll: closePeers, sendChat } = usePeerConnections({
     meetingCode,
     participantId: myParticipant?.id ?? null,
     localStream: stream,
@@ -90,14 +111,35 @@ function MeetingRoomContent() {
     onPeerLeft: handlePeerLeft,
     onReconnecting: () => addToast('Reconnecting to meeting...', 'info'),
     onReconnectFailed: () => addToast('Lost connection to meeting.', 'error'),
+    onChat: handleChat,
   });
 
-  // ── Room state ────────────────────────────────────────────────────────────
-  const [activePanel, setActivePanel] = useState<'participants' | 'chat' | null>(null);
+  // ── Dialogs and Timer ─────────────────────────────────────────────────────
   const [showEndMenu, setShowEndMenu] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
   const [timer, setTimer] = useState(0);
   const [reactions, setReactions] = useState<Reaction[]>([]);
+
+  useEffect(() => {
+    if (activePanel === 'chat') setUnreadChatCount(0);
+  }, [activePanel]);
+
+  const handleSendMessage = useCallback((text: string, to: number | 'all') => {
+    sendChat(text, to === 'all' ? null : to);
+    let recipientName = undefined;
+    if (to !== 'all') {
+      recipientName = backendParticipantsRef.current.find(p => p.id === to)?.display_name || 'Unknown';
+    }
+    setChatMessages((prev) => [...prev, {
+      id: Date.now() + Math.random().toString(),
+      sender: 'Me',
+      text,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      toAll: to === 'all',
+      isMe: true,
+      recipientName,
+    }]);
+  }, [sendChat]);
 
   // ── Keyboard shortcuts ────────────────────────────────────────────────────
   useEffect(() => {
@@ -342,9 +384,11 @@ function MeetingRoomContent() {
         {activePanel === 'chat' && (
           <ChatPanel
             onClose={() => setActivePanel(null)}
+            messages={chatMessages}
+            onSendMessage={handleSendMessage}
             participants={panelParticipants
               .filter((p) => p.id !== myParticipant.id)
-              .map((p) => ({ id: p.id, name: p.display_name }))}
+              .map((p) => ({ id: p.id, name: p.display_name, isConnected: connectedPeers.has(p.id) }))}
           />
         )}
       </div>
@@ -366,6 +410,7 @@ function MeetingRoomContent() {
           onStopShare={stopShare}
           onReaction={handleReaction}
           onMoreItem={handleMoreItem}
+          unreadChatCount={unreadChatCount}
         />
         {showEndMenu && (
           <EndMenu

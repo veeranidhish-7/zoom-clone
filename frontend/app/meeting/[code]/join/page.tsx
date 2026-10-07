@@ -37,7 +37,8 @@ export default function JoinMeetingPage() {
     setIsJoining(true);
     setJoinError(null);
     try {
-      const res = await api.joinMeeting(meetingCode, { display_name: displayName.trim() }) as {
+      const isHost = localStorage.getItem('host_' + meetingCode) === 'true';
+      const res = await api.joinMeeting(meetingCode, { display_name: displayName.trim(), is_host: isHost }) as {
         participant: { id: number; role: string; display_name: string; is_muted: boolean; is_video_off: boolean };
         meeting: { title: string; status: string };
       };

@@ -18,6 +18,7 @@ interface ToolbarProps {
   onStopShare: () => void;
   onReaction: (emoji: string) => void;
   onMoreItem: (label: string) => void;
+  unreadChatCount?: number;
 }
 
 const REACTION_EMOJIS = ['👍', '❤️', '😂', '😮', '👏', '🎉'];
@@ -43,7 +44,7 @@ export default function Toolbar({
   participantsCount, isMuted, isVideoOff,
   onToggleMute, onToggleVideo, onInvite,
   onShare, isSharing, onStopShare,
-  onReaction, onMoreItem,
+  onReaction, onMoreItem, unreadChatCount = 0,
 }: ToolbarProps) {
   const [showReactions, setShowReactions] = useState(false);
   const [showMore, setShowMore] = useState(false);
@@ -144,11 +145,16 @@ export default function Toolbar({
           id="btn-chat"
           onClick={onToggleChat}
           aria-label="Chat"
-          className={btnBase}
+          className={`${btnBase} relative`}
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16" className="mb-1">
             <path d="M2 2a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h11.586l2.707 2.707A.5.5 0 0 0 17 16V4a2 2 0 0 0-2-2H2zm13 2v9.586l-1.586-1.586H2V4h13z"/>
           </svg>
+          {unreadChatCount > 0 && (
+            <span className="absolute top-1 right-2 bg-red-500 text-white text-[10px] rounded px-1 min-w-[16px] text-center">
+              {unreadChatCount > 99 ? '99+' : unreadChatCount}
+            </span>
+          )}
           <span className="text-[10px]">Chat</span>
         </button>
 

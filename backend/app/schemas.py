@@ -95,6 +95,7 @@ class PatchMeetingBody(BaseModel):
 
 class JoinBody(BaseModel):
     display_name: str
+    is_host: Optional[bool] = False
 
     @field_validator("display_name")
     @classmethod

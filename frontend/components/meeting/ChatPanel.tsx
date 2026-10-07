@@ -2,21 +2,24 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 
-interface ChatMessage {
-  id: number;
+export interface ChatMessage {
+  id: string;
   sender: string;
   text: string;
   time: string;
   toAll: boolean;
+  isMe: boolean;
+  recipientName?: string;
 }
 
 interface ChatPanelProps {
   onClose: () => void;
-  participants: { id: number; name: string }[];
+  participants: { id: number; name: string; isConnected?: boolean }[];
+  messages: ChatMessage[];
+  onSendMessage: (text: string, to: number | 'all') => void;
 }
 
-export default function ChatPanel({ onClose, participants }: ChatPanelProps) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+export default function ChatPanel({ onClose, participants, messages, onSendMessage }: ChatPanelProps) {
   const [input, setInput] = useState('');
   const [recipient, setRecipient] = useState<'all' | number>('all');
   const listRef = useRef<HTMLDivElement>(null);
@@ -35,14 +38,7 @@ export default function ChatPanel({ onClose, participants }: ChatPanelProps) {
   const handleSend = (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim()) return;
-    const newMessage: ChatMessage = {
-      id: Date.now(),
-      sender: 'Me',
-      text: input.trim(),
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      toAll: recipient === 'all',
-    };
-    setMessages((prev) => [...prev, newMessage]);
+    onSendMessage(input.trim(), recipient);
     setInput('');
   };
 
@@ -81,14 +77,16 @@ export default function ChatPanel({ onClose, participants }: ChatPanelProps) {
       <div ref={listRef} aria-live="polite" aria-label="Chat messages" className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
         {messages.length === 0 ? (
           <p className="text-center text-xs text-gray-500 mt-4">
-            Messages here are visible only to you in this demo session.
+            No messages yet.
           </p>
         ) : (
           messages.map((m) => (
             <div key={m.id} className="flex flex-col gap-0.5">
               <div className="flex items-baseline gap-2">
-                <span className="text-[13px] font-medium text-[var(--blue-border)]">{m.sender}</span>
-                {!m.toAll && <span className="text-[10px] text-gray-500">→ Direct</span>}
+                <span className="text-[13px] font-medium text-[var(--blue-border)]">
+                  {m.isMe ? (m.toAll ? 'You to Everyone' : `You to ${m.recipientName}`) : m.sender}
+                </span>
+                {!m.toAll && !m.isMe && <span className="text-[10px] text-gray-500">→ Direct</span>}
                 <span className="text-[10px] text-gray-500">{m.time}</span>
               </div>
               <p className="text-[13px] text-gray-200 break-words">{m.text}</p>
@@ -110,7 +108,9 @@ export default function ChatPanel({ onClose, participants }: ChatPanelProps) {
             >
               <option value="all">Meeting Group Chat</option>
               {participants.map((p) => (
-                <option key={p.id} value={p.id}>{p.name} (Direct)</option>
+                <option key={p.id} value={p.id} disabled={!p.isConnected}>
+                  {p.name} {!p.isConnected ? '(demo)' : '(Direct)'}
+                </option>
               ))}
             </select>
           </div>

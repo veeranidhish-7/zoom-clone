@@ -22,9 +22,9 @@ def seed_database(db: Session) -> None:
     now = datetime.utcnow()
 
     # ── 1 user ──────────────────────────────────────────────────────────────
-    anirudh = User(name="Anirudh", email="anirudh@example.com")
-    db.add(anirudh)
-    db.flush()  # get anirudh.id
+    default_user = User(name="User", email="user@example.com")
+    db.add(default_user)
+    db.flush()  # get default_user.id
 
     # ── 4 upcoming scheduled meetings ───────────────────────────────────────
     upcoming_specs = [
@@ -38,7 +38,7 @@ def seed_database(db: Session) -> None:
         code = generate_meeting_code()
         m = Meeting(
             meeting_code=code,
-            host_id=anirudh.id,
+            host_id=default_user.id,
             title=title,
             type="scheduled",
             scheduled_start=start,
@@ -64,7 +64,7 @@ def seed_database(db: Session) -> None:
         code = generate_meeting_code()
         m = Meeting(
             meeting_code=code,
-            host_id=anirudh.id,
+            host_id=default_user.id,
             title=title,
             type="scheduled",
             scheduled_start=start,
@@ -79,8 +79,8 @@ def seed_database(db: Session) -> None:
         # Host participant
         host_p = Participant(
             meeting_id=m.id,
-            user_id=anirudh.id,
-            display_name=anirudh.name,
+            user_id=default_user.id,
+            display_name=default_user.name,
             role="host",
             is_muted=False,
             is_video_off=False,

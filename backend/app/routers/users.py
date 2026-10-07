@@ -10,7 +10,7 @@ router = APIRouter(prefix="/api", tags=["users"])
 
 @router.get("/me", response_model=UserOut)
 def get_me(db: Session = Depends(get_db)):
-    """Return the default user (Anirudh, id=1)."""
+    """Return the default user (User, id=1)."""
     user = db.query(User).filter(User.id == 1).first()
     if not user:
         from fastapi import HTTPException

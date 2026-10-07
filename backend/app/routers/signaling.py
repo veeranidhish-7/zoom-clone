@@ -91,6 +91,35 @@ async def websocket_endpoint(websocket: WebSocket, code: str, participant_id: in
                     forward_msg = {k: v for k, v in message.items() if k != "to"}
                     forward_msg["from"] = participant_id
                     await manager.send_personal_message(code, target_id, forward_msg)
+            elif msg_type == "chat":
+                try:
+                    text = message.get("text", "")
+                    if isinstance(text, str):
+                        text = text.strip()
+                    if not text or len(text) > 500:
+                        continue
+                        
+                    target_id = message.get("to")
+                    if target_id is not None and not isinstance(target_id, int):
+                        continue
+                        
+                    import datetime
+                    ts = datetime.datetime.utcnow().isoformat() + "Z"
+                    
+                    chat_msg = {
+                        "type": "chat",
+                        "from": participant_id,
+                        "from_name": participant.display_name,
+                        "to": target_id,
+                        "text": text,
+                        "ts": ts
+                    }
+                    if target_id is not None:
+                        await manager.send_personal_message(code, target_id, chat_msg)
+                    else:
+                        await manager.broadcast(code, chat_msg, exclude=participant_id)
+                except Exception as e:
+                    logger.error(f"Chat error: {e}")
             elif msg_type == "media-state":
                 forward_msg = {
                     "type": "media-state",
