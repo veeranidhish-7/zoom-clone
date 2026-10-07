@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { api } from '@/lib/api';
-import { useToast } from '@/components/ui/Toast';
+import { useToast } from '@/components/ui/useToast';
 
 interface Participant {
   id: number;
@@ -36,7 +36,7 @@ export default function ParticipantsPanel({
   code,
   onClose,
 }: ParticipantsPanelProps) {
-  const { addToast } = useToast();
+  const { toast: addToast } = useToast();
   const [removingId, setRemovingId] = useState<number | null>(null);
   const [isMutingAll, setIsMutingAll] = useState(false);
 

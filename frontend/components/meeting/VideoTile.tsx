@@ -20,7 +20,7 @@ export default function VideoTile({ participant }: { participant: TileParticipan
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
   useEffect(() => {
-    if (videoRef.current && participant.stream) {
+    if (videoRef.current && participant.stream && videoRef.current.srcObject !== participant.stream) {
       videoRef.current.srcObject = participant.stream;
     }
   }, [participant.stream]);
@@ -31,29 +31,28 @@ export default function VideoTile({ participant }: { participant: TileParticipan
 
   return (
     <div className="relative h-full w-full overflow-hidden rounded-[12px] bg-[var(--camoff-tile)] flex items-center justify-center border border-transparent hover:border-[#444] transition-colors">
-      {showVideo && participant.isMe ? (
+      
+      {participant.isMe && participant.stream && (
         <video
           ref={videoRef}
           autoPlay
           muted
           playsInline
-          className="h-full w-full object-cover"
+          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-200 ${showVideo ? 'opacity-100' : 'opacity-0'}`}
           style={{ transform: 'scaleX(-1)' }} // mirror for self-view
         />
-      ) : !participant.isVideoOff ? (
-        /* Remote participant with "video on" — backend has no actual stream, show avatar */
-        <div className="flex h-24 w-24 items-center justify-center rounded-2xl bg-[var(--avatar-purple)] text-3xl font-medium text-white shadow-lg">
-          {getInitials(participant.name)}
-        </div>
-      ) : (
-        /* Camera off */
-        <div className="flex h-24 w-24 items-center justify-center rounded-2xl bg-[var(--avatar-purple)] text-3xl font-medium text-white shadow-lg">
-          {getInitials(participant.name)}
+      )}
+
+      {!showVideo && (
+        <div className="absolute inset-0 flex items-center justify-center bg-[var(--camoff-tile)] z-10">
+          <div className="flex h-24 w-24 items-center justify-center rounded-2xl bg-[var(--avatar-purple)] text-3xl font-medium text-white shadow-lg">
+            {getInitials(participant.name)}
+          </div>
         </div>
       )}
 
-      {/* Name label bottom-left */}
-      <div className="absolute bottom-3 left-3 flex items-center gap-2 rounded bg-black/70 px-2 py-1 text-xs text-white">
+      {/* Name label bottom-center */}
+      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-2 rounded bg-black/70 px-3 py-1.5 text-xs text-white z-20 shadow-sm backdrop-blur-sm">
         {participant.isMuted && (
           <svg className="text-[var(--muted-red)] shrink-0" xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" viewBox="0 0 16 16">
             <path d="M13.879 10.414a2.501 2.501 0 0 0-3.465 3.465zm.707.707-3.465 3.465a2.501 2.501 0 0 0 3.465-3.465m-4.56-1.096L8.45 8.45A3.5 3.5 0 0 0 5 5V2.5a.5.5 0 0 0-1 0V5a4.5 4.5 0 0 1 8.01 2.76zM7 4a1 1 0 0 1 2 0v4.293l-2-2zM2.854 2.146a.5.5 0 1 0-.708.708l11 11a.5.5 0 0 0 .708-.708z"/>

@@ -4,14 +4,14 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
 import { useMeetingContext } from '@/hooks/useMeetingContext';
-import { useToast } from '@/components/ui/Toast';
+import { useToast } from '@/components/ui/useToast';
 
 export default function JoinMeetingPage() {
   const { code } = useParams();
   const router = useRouter();
   const meetingCode = Array.isArray(code) ? code[0] : code ?? '';
   const { setJoinResult } = useMeetingContext();
-  const { addToast } = useToast();
+  const { toast: addToast } = useToast();
 
   const [displayName, setDisplayName] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -61,18 +61,7 @@ export default function JoinMeetingPage() {
 
   return (
     <div className="flex h-screen w-screen flex-col bg-[#0D0D0D] font-[var(--font-body)]">
-      {/* Name input bottom-left */}
-      <div className="absolute bottom-6 left-6 z-10 flex flex-col gap-1">
-        <label className="text-xs text-gray-400">Your name</label>
-        <input
-          type="text"
-          value={displayName}
-          onChange={(e) => setDisplayName(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') handleJoin('without'); }}
-          placeholder="Enter your name"
-          className="rounded bg-black/50 px-3 py-2 text-white border border-[#2A2B2D] focus:border-[var(--blue-border)] focus:outline-none min-w-[200px]"
-        />
-      </div>
+
 
       {/* Back link */}
       <div className="absolute top-4 left-4 z-10">
@@ -96,6 +85,18 @@ export default function JoinMeetingPage() {
                 <path d="M0 5a2 2 0 0 1 2-2h7.5a2 2 0 0 1 1.983 1.738l3.11-1.382A1 1 0 0 1 16 4.269v7.462a1 1 0 0 1-1.406.913l-3.111-1.382A2 2 0 0 1 9.5 13H2a2 2 0 0 1-2-2V5z"/>
               </svg>
             </div>
+          </div>
+
+          <div className="mb-6 flex flex-col gap-1 text-left">
+            <label className="text-sm font-medium text-gray-300">Your name</label>
+            <input
+              type="text"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleJoin('without'); }}
+              placeholder="Enter your name"
+              className="rounded-[8px] bg-black/50 px-3 py-2.5 text-white border border-[#2A2B2D] focus:border-[var(--blue-border)] focus:outline-none w-full transition"
+            />
           </div>
 
           <h2 className="mb-2 text-[18px] font-semibold leading-tight">

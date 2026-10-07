@@ -14,6 +14,26 @@ export function useLocalMedia({ requestMedia, onError }: UseLocalMediaOptions) {
   const [permissionDenied, setPermissionDenied] = useState(false);
   const streamRef = useRef<MediaStream | null>(null);
 
+  const fetchMedia = useCallback(async () => {
+    if (streamRef.current) return streamRef.current;
+    try {
+      const ms = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+      });
+      streamRef.current = ms;
+      setStream(ms);
+      return ms;
+    } catch (err) {
+      setPermissionDenied(true);
+      const msg = err instanceof Error && err.name === 'NotFoundError'
+        ? 'No camera or microphone found'
+        : 'Camera/microphone permission denied';
+      onError?.(msg);
+      return null;
+    }
+  }, [onError]);
+
   // Acquire media on mount if requested
   useEffect(() => {
     if (!requestMedia) {
@@ -23,42 +43,23 @@ export function useLocalMedia({ requestMedia, onError }: UseLocalMediaOptions) {
     }
 
     let cancelled = false;
-
-    async function getMedia() {
-      try {
-        const ms = await navigator.mediaDevices.getUserMedia({
-          audio: true,
-          video: { width: { ideal: 1280 }, height: { ideal: 720 } },
-        });
-        if (cancelled) {
-          ms.getTracks().forEach((t) => t.stop());
-          return;
-        }
-        streamRef.current = ms;
-        setStream(ms);
-        // Start muted and cam on by spec
-        ms.getAudioTracks().forEach((t) => { t.enabled = false; });
-        setIsMuted(true);
-        setIsVideoOff(false);
-      } catch (err) {
-        if (cancelled) return;
-        setPermissionDenied(true);
-        setIsMuted(true);
-        setIsVideoOff(true);
-        const msg =
-          err instanceof Error && err.name === 'NotFoundError'
-            ? 'No camera or microphone found'
-            : 'Camera/microphone permission denied';
-        onError?.(msg);
+    fetchMedia().then((ms) => {
+      if (cancelled) {
+        ms?.getTracks().forEach((t) => t.stop());
+        return;
       }
-    }
-
-    getMedia();
+      if (ms) {
+        setIsMuted(true);
+        // Turn off audio track since we start muted
+        ms.getAudioTracks().forEach((t) => { t.enabled = false; });
+        setIsVideoOff(false);
+      }
+    });
 
     return () => {
       cancelled = true;
     };
-  }, [requestMedia]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [requestMedia, fetchMedia]);
 
   // Stop all tracks on unmount
   useEffect(() => {
@@ -67,21 +68,45 @@ export function useLocalMedia({ requestMedia, onError }: UseLocalMediaOptions) {
     };
   }, []);
 
-  const toggleMute = useCallback(() => {
-    const tracks = streamRef.current?.getAudioTracks() ?? [];
+  const toggleMute = useCallback(async () => {
+    let currentStream = streamRef.current;
+    let newlyFetched = false;
+    if (!currentStream) {
+       currentStream = await fetchMedia();
+       newlyFetched = true;
+    }
+    if (!currentStream) return isMuted;
+
+    if (newlyFetched && isVideoOff) {
+      currentStream.getVideoTracks().forEach((t) => { t.enabled = false; });
+    }
+
+    const tracks = currentStream.getAudioTracks() ?? [];
     const next = !isMuted;
-    tracks.forEach((t) => { t.enabled = !next; }); // enabled = true → unmuted
+    tracks.forEach((t) => { t.enabled = !next; }); 
     setIsMuted(next);
     return next;
-  }, [isMuted]);
+  }, [isMuted, fetchMedia, isVideoOff]);
 
-  const toggleVideo = useCallback(() => {
-    const tracks = streamRef.current?.getVideoTracks() ?? [];
+  const toggleVideo = useCallback(async () => {
+    let currentStream = streamRef.current;
+    let newlyFetched = false;
+    if (!currentStream) {
+       currentStream = await fetchMedia();
+       newlyFetched = true;
+    }
+    if (!currentStream) return isVideoOff;
+
+    if (newlyFetched && isMuted) {
+      currentStream.getAudioTracks().forEach((t) => { t.enabled = false; });
+    }
+
+    const tracks = currentStream.getVideoTracks() ?? [];
     const next = !isVideoOff;
-    tracks.forEach((t) => { t.enabled = !next; }); // enabled = true → video on
+    tracks.forEach((t) => { t.enabled = !next; }); 
     setIsVideoOff(next);
     return next;
-  }, [isVideoOff]);
+  }, [isVideoOff, fetchMedia, isMuted]);
 
   const stopAll = useCallback(() => {
     streamRef.current?.getTracks().forEach((t) => t.stop());

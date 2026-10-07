@@ -6,7 +6,7 @@ import { api, ApiError, leaveMeetingBeacon } from '@/lib/api';
 import { useMeetingContext } from '@/hooks/useMeetingContext';
 import { useParticipants } from '@/hooks/useParticipants';
 import { useLocalMedia } from '@/hooks/useLocalMedia';
-import { useToast } from '@/components/ui/Toast';
+import { useToast } from '@/components/ui/useToast';
 import VideoGrid from '@/components/meeting/VideoGrid';
 import Toolbar from '@/components/meeting/Toolbar';
 import ParticipantsPanel from '@/components/meeting/ParticipantsPanel';
@@ -18,7 +18,7 @@ function MeetingRoomContent() {
   const { code } = useParams();
   const router = useRouter();
   const meetingCode = (Array.isArray(code) ? code[0] : code) ?? '';
-  const { addToast } = useToast();
+  const { toast: addToast } = useToast();
 
   const { participant: myParticipant, meeting, camRequested, clear } = useMeetingContext();
 
@@ -58,15 +58,13 @@ function MeetingRoomContent() {
   // ── Callbacks for participant events ──────────────────────────────────────
   const handleRemoved = useCallback(() => {
     stopMedia();
-    clear();
     router.push(`/meeting/${meetingCode}/ended?reason=${encodeURIComponent('You were removed by the host')}`);
-  }, [stopMedia, clear, router, meetingCode]);
+  }, [stopMedia, router, meetingCode]);
 
   const handleMeetingEnded = useCallback(() => {
     stopMedia();
-    clear();
     router.push(`/meeting/${meetingCode}/ended?reason=${encodeURIComponent('The host ended this meeting')}`);
-  }, [stopMedia, clear, router, meetingCode]);
+  }, [stopMedia, router, meetingCode]);
 
   // ── Participants polling ──────────────────────────────────────────────────
   const backendParticipants = useParticipants({
@@ -100,7 +98,7 @@ function MeetingRoomContent() {
 
   // ── Mic / Video toggles ───────────────────────────────────────────────────
   const handleToggleMute = async () => {
-    const next = toggleMute();
+    const next = await toggleMute();
     if (!myParticipant?.id) return;
     const prev = myIsMuted;
     setMyIsMuted(next);
@@ -113,7 +111,7 @@ function MeetingRoomContent() {
   };
 
   const handleToggleVideo = async () => {
-    const next = toggleVideo();
+    const next = await toggleVideo();
     if (!myParticipant?.id) return;
     const prev = myIsVideoOff;
     setMyIsVideoOff(next);
@@ -136,9 +134,8 @@ function MeetingRoomContent() {
         addToast('Failed to leave meeting', 'error');
       }
     }
-    clear();
     router.push(`/meeting/${meetingCode}/ended?reason=${encodeURIComponent('You left the meeting')}`);
-  }, [myParticipant?.id, meetingCode, stopMedia, clear, router, addToast]);
+  }, [myParticipant?.id, meetingCode, stopMedia, router, addToast]);
 
   const handleEndAll = useCallback(async () => {
     if (!myParticipant?.id) return;
@@ -150,9 +147,8 @@ function MeetingRoomContent() {
         addToast('Failed to end meeting', 'error');
       }
     }
-    clear();
     router.push(`/meeting/${meetingCode}/ended?reason=${encodeURIComponent('You ended the meeting')}`);
-  }, [myParticipant?.id, meetingCode, stopMedia, clear, router, addToast]);
+  }, [myParticipant?.id, meetingCode, stopMedia, router, addToast]);
 
   // ── Build tile list ───────────────────────────────────────────────────────
   const isHost = myParticipant?.role === 'host';
@@ -235,7 +231,9 @@ function MeetingRoomContent() {
         {activePanel === 'chat' && (
           <ChatPanel
             onClose={() => setActivePanel(null)}
-            participants={panelParticipants.filter((p) => p.id !== myParticipant.id)}
+            participants={panelParticipants
+  .filter((p) => p.id !== myParticipant.id)
+  .map((p) => ({ id: p.id, name: p.display_name }))}
           />
         )}
       </div>
