@@ -7,8 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .database import engine, SessionLocal
 from .models import Base
 from .seed import seed_database
-from .routers import meetings, users
-
+from .routers import meetings, users, signaling
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -38,6 +37,7 @@ app.add_middleware(
 # ── Routers ───────────────────────────────────────────────────────────────
 app.include_router(users.router)
 app.include_router(meetings.router)
+app.include_router(signaling.router)
 
 
 @app.get("/")
