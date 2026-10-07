@@ -9,8 +9,9 @@ export interface TileParticipant {
   isMe?: boolean;
   isMuted: boolean;
   isVideoOff: boolean;
-  stream?: MediaStream | null;       // only for "Me" tile
+  stream?: MediaStream | null;       // local or remote stream
   streamVersion?: number;            // bumped when tracks are added/removed
+  videoMuted?: boolean;              // if true, <video> element is muted (local tile)
 }
 
 function getInitials(name: string) {
@@ -38,9 +39,10 @@ export default function VideoTile({ participant }: { participant: TileParticipan
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [participant.stream, participant.streamVersion]);
 
+  // For remote tiles: show video only when we have a stream with a video track AND isVideoOff is false
   const showVideo = participant.isMe
     ? !!participant.stream && !participant.isVideoOff
-    : !participant.isVideoOff;
+    : !!participant.stream && !participant.isVideoOff;
 
   return (
     <div className="relative h-full w-full overflow-hidden rounded-[12px] bg-[var(--camoff-tile)] flex items-center justify-center border border-transparent hover:border-[#444] transition-colors">
@@ -49,7 +51,7 @@ export default function VideoTile({ participant }: { participant: TileParticipan
       <video
         ref={videoRef}
         autoPlay
-        muted
+        muted={participant.videoMuted !== false}
         playsInline
         className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-200 ${
           showVideo ? 'opacity-100' : 'opacity-0 pointer-events-none'

@@ -7,6 +7,7 @@ import { useMeetingContext } from '@/hooks/useMeetingContext';
 import { useParticipants } from '@/hooks/useParticipants';
 import { useLocalMedia } from '@/hooks/useLocalMedia';
 import { useScreenShare } from '@/hooks/useScreenShare';
+import { usePeerConnections } from '@/hooks/usePeerConnections';
 import { useToast } from '@/components/ui/useToast';
 import VideoGrid from '@/components/meeting/VideoGrid';
 import Toolbar from '@/components/meeting/Toolbar';
@@ -50,6 +51,15 @@ function MeetingRoomContent() {
 
   // ── Screen share ──────────────────────────────────────────────────────────
   const { shareStream, isSharing, startShare, stopShare } = useScreenShare({
+    onError: (msg) => addToast(msg, 'error'),
+  });
+
+  // ── WebRTC peer connections ───────────────────────────────────────────────
+  const { remoteStreams, closeAll: closePeers } = usePeerConnections({
+    meetingCode,
+    participantId: myParticipant?.id ?? null,
+    localStream: stream,
+    enabled: !!myParticipant?.id,
     onError: (msg) => addToast(msg, 'error'),
   });
 
@@ -98,14 +108,16 @@ function MeetingRoomContent() {
   const handleRemoved = useCallback(() => {
     stopMedia();
     stopShare();
+    closePeers();
     router.push(`/meeting/${meetingCode}/ended?reason=${encodeURIComponent('You were removed by the host')}`);
-  }, [stopMedia, stopShare, router, meetingCode]);
+  }, [stopMedia, stopShare, closePeers, router, meetingCode]);
 
   const handleMeetingEnded = useCallback(() => {
     stopMedia();
     stopShare();
+    closePeers();
     router.push(`/meeting/${meetingCode}/ended?reason=${encodeURIComponent('The host ended this meeting')}`);
-  }, [stopMedia, stopShare, router, meetingCode]);
+  }, [stopMedia, stopShare, closePeers, router, meetingCode]);
 
   // ── Participants polling ──────────────────────────────────────────────────
   const backendParticipants = useParticipants({
@@ -167,6 +179,7 @@ function MeetingRoomContent() {
   // ── Leave / End ───────────────────────────────────────────────────────────
   const handleLeave = useCallback(async () => {
     if (!myParticipant?.id) return;
+    closePeers();
     stopMedia();
     stopShare();
     try {
@@ -177,10 +190,11 @@ function MeetingRoomContent() {
       }
     }
     router.push(`/meeting/${meetingCode}/ended?reason=${encodeURIComponent('You left the meeting')}`);
-  }, [myParticipant?.id, meetingCode, stopMedia, stopShare, router, addToast]);
+  }, [myParticipant?.id, meetingCode, closePeers, stopMedia, stopShare, router, addToast]);
 
   const handleEndAll = useCallback(async () => {
     if (!myParticipant?.id) return;
+    closePeers();
     stopMedia();
     stopShare();
     try {
@@ -191,7 +205,7 @@ function MeetingRoomContent() {
       }
     }
     router.push(`/meeting/${meetingCode}/ended?reason=${encodeURIComponent('You ended the meeting')}`);
-  }, [myParticipant?.id, meetingCode, stopMedia, stopShare, router, addToast]);
+  }, [myParticipant?.id, meetingCode, closePeers, stopMedia, stopShare, router, addToast]);
 
   // ── Reactions ─────────────────────────────────────────────────────────────
   const handleReaction = useCallback((emoji: string) => {
@@ -216,9 +230,9 @@ function MeetingRoomContent() {
         isMe: true,
         isMuted: myIsMuted,
         isVideoOff: myIsVideoOff,
-        // If sharing, show the screen share stream instead of the webcam
         stream: isSharing ? shareStream : stream,
         streamVersion,
+        videoMuted: true,   // always mute local tile to avoid echo
       }
     : null;
 
@@ -231,6 +245,8 @@ function MeetingRoomContent() {
       isMe: false,
       isMuted: p.is_muted,
       isVideoOff: p.is_video_off,
+      stream: remoteStreams.get(p.id) ?? null,
+      videoMuted: false,    // remote audio plays through
     }));
 
   const allTiles: TileParticipant[] = meTile ? [meTile, ...otherTiles] : otherTiles;
