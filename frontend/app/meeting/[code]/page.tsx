@@ -38,7 +38,6 @@ function MeetingRoomContent() {
   // ── Local media ───────────────────────────────────────────────────────────
   const {
     stream,
-    streamVersion,
     isMuted,
     isVideoOff,
     isReady: localMediaReady,
@@ -56,13 +55,41 @@ function MeetingRoomContent() {
   });
 
   // ── WebRTC peer connections ───────────────────────────────────────────────
-  const { remoteStreams, closeAll: closePeers } = usePeerConnections({
+  const backendParticipantsRef = useRef<any[]>([]);
+  const [departedPeers, setDepartedPeers] = useState<Set<number>>(new Set());
+
+  const handlePeerLeft = useCallback((peerId: number) => {
+    setDepartedPeers((prev) => {
+      const next = new Set(prev);
+      next.add(peerId);
+      return next;
+    });
+  }, []);
+
+  const handlePeerFailed = useCallback((peerId: number) => {
+    const p = backendParticipantsRef.current.find((x) => x.id === peerId);
+    if (p) addToast(`Could not connect to ${p.display_name}`, 'error');
+  }, [addToast]);
+
+  // Sync backend mute/video state optimistically
+  const [myIsMuted, setMyIsMuted] = useState(myParticipant?.is_muted ?? true);
+  const [myIsVideoOff, setMyIsVideoOff] = useState(myParticipant?.is_video_off ?? true);
+
+  useEffect(() => { setMyIsMuted(isMuted); }, [isMuted]);
+  useEffect(() => { setMyIsVideoOff(isVideoOff); }, [isVideoOff]);
+
+  const { remoteStreams, mediaStates, closeAll: closePeers } = usePeerConnections({
     meetingCode,
     participantId: myParticipant?.id ?? null,
     localStream: stream,
     localMediaReady,
     enabled: !!myParticipant?.id,
+    localMediaState: { video: !myIsVideoOff, audio: !myIsMuted },
     onError: (msg) => addToast(msg, 'error'),
+    onPeerFailed: handlePeerFailed,
+    onPeerLeft: handlePeerLeft,
+    onReconnecting: () => addToast('Reconnecting to meeting...', 'info'),
+    onReconnectFailed: () => addToast('Lost connection to meeting.', 'error'),
   });
 
   // ── Room state ────────────────────────────────────────────────────────────
@@ -71,13 +98,6 @@ function MeetingRoomContent() {
   const [showInvite, setShowInvite] = useState(false);
   const [timer, setTimer] = useState(0);
   const [reactions, setReactions] = useState<Reaction[]>([]);
-
-  // Sync backend mute/video state optimistically
-  const [myIsMuted, setMyIsMuted] = useState(myParticipant?.is_muted ?? true);
-  const [myIsVideoOff, setMyIsVideoOff] = useState(myParticipant?.is_video_off ?? true);
-
-  useEffect(() => { setMyIsMuted(isMuted); }, [isMuted]);
-  useEffect(() => { setMyIsVideoOff(isVideoOff); }, [isVideoOff]);
 
   // ── Keyboard shortcuts ────────────────────────────────────────────────────
   useEffect(() => {
@@ -129,6 +149,7 @@ function MeetingRoomContent() {
     onMeetingEnded: handleMeetingEnded,
     onError: (msg) => addToast(msg, 'error'),
   });
+  backendParticipantsRef.current = backendParticipants;
 
   // ── Timer ─────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -233,23 +254,25 @@ function MeetingRoomContent() {
         isMuted: myIsMuted,
         isVideoOff: myIsVideoOff,
         stream: isSharing ? shareStream : stream,
-        streamVersion,
         videoMuted: true,   // always mute local tile to avoid echo
       }
     : null;
 
   const otherTiles: TileParticipant[] = backendParticipants
-    .filter((p) => p.id !== myParticipant?.id)
-    .map((p) => ({
-      id: p.id,
-      name: p.display_name,
-      isHost: p.role === 'host',
-      isMe: false,
-      isMuted: p.is_muted,
-      isVideoOff: p.is_video_off,
-      stream: remoteStreams.get(p.id) ?? null,
-      videoMuted: false,    // remote audio plays through
-    }));
+    .filter((p) => p.id !== myParticipant?.id && !departedPeers.has(p.id))
+    .map((p) => {
+      const ms = mediaStates.get(p.id);
+      return {
+        id: p.id,
+        name: p.display_name,
+        isHost: p.role === 'host',
+        isMe: false,
+        isMuted: ms ? !ms.audio : p.is_muted,
+        isVideoOff: ms ? !ms.video : p.is_video_off,
+        stream: remoteStreams.get(p.id) ?? null,
+        videoMuted: false,    // remote audio plays through
+      };
+    });
 
   const allTiles: TileParticipant[] = meTile ? [meTile, ...otherTiles] : otherTiles;
 

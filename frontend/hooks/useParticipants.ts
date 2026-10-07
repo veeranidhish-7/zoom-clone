@@ -54,7 +54,7 @@ export function useParticipants({
 
       if (myIdRef.current !== null) {
         const me = data.find((p) => p.id === myIdRef.current);
-        if (me && me.status === 'removed') {
+        if (!me || me.status === 'removed') {
           stoppedRef.current = true;
           onRemovedRef.current();
         }

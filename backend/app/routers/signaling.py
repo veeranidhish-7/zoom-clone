@@ -91,6 +91,18 @@ async def websocket_endpoint(websocket: WebSocket, code: str, participant_id: in
                     forward_msg = {k: v for k, v in message.items() if k != "to"}
                     forward_msg["from"] = participant_id
                     await manager.send_personal_message(code, target_id, forward_msg)
+            elif msg_type == "media-state":
+                forward_msg = {
+                    "type": "media-state",
+                    "from": participant_id,
+                    "video": message.get("video", False),
+                    "audio": message.get("audio", False),
+                }
+                target_id = message.get("to")
+                if target_id is not None:
+                    await manager.send_personal_message(code, target_id, forward_msg)
+                else:
+                    await manager.broadcast(code, forward_msg, exclude=participant_id)
     except WebSocketDisconnect:
         manager.disconnect(code, participant_id)
         await manager.broadcast(code, {"type": "peer-left", "id": participant_id})

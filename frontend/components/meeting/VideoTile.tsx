@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect } from 'react';
 
 export interface TileParticipant {
   id: number;
@@ -10,7 +10,6 @@ export interface TileParticipant {
   isMuted: boolean;
   isVideoOff: boolean;
   stream?: MediaStream | null;       // local or remote stream
-  streamVersion?: number;            // bumped when tracks are added/removed
   videoMuted?: boolean;              // if true, <video> element is muted (local tile)
 }
 
@@ -20,83 +19,29 @@ function getInitials(name: string) {
 
 export default function VideoTile({ participant }: { participant: TileParticipant }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const [, setTrackStateTick] = useState(0);
 
-  useEffect(() => {
-    const stream = participant.stream;
-    if (!stream) return;
-
-    const tick = () => setTrackStateTick((n: number) => n + 1);
-
-    const bindTrack = (t: MediaStreamTrack) => {
-      if (t.kind === 'video') {
-        t.addEventListener('mute', tick);
-        t.addEventListener('unmute', tick);
-        t.addEventListener('ended', tick);
-      }
-    };
-    const unbindTrack = (t: MediaStreamTrack) => {
-      if (t.kind === 'video') {
-        t.removeEventListener('mute', tick);
-        t.removeEventListener('unmute', tick);
-        t.removeEventListener('ended', tick);
-      }
-    };
-
-    const tracks = stream.getVideoTracks();
-    tracks.forEach(bindTrack);
-
-    const handleAddTrack = (e: MediaStreamTrackEvent) => {
-      bindTrack(e.track);
-      tick();
-    };
-    const handleRemoveTrack = (e: MediaStreamTrackEvent) => {
-      unbindTrack(e.track);
-      tick();
-    };
-
-    stream.addEventListener('addtrack', handleAddTrack);
-    stream.addEventListener('removetrack', handleRemoveTrack);
-
-    return () => {
-      tracks.forEach(unbindTrack);
-      stream.removeEventListener('addtrack', handleAddTrack);
-      stream.removeEventListener('removetrack', handleRemoveTrack);
-    };
-  }, [participant.stream]);
-
-  // Re-bind srcObject whenever the stream object changes OR whenever tracks
-  // are added/removed in-place (signalled by streamVersion).
-  // The <video> is always in the DOM so srcObject survives grid layout changes.
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
     const next = participant.stream ?? null;
-    // Always reassign when version ticks — even if the object reference is the
-    // same — so the browser picks up the updated track list.
-    video.srcObject = next;
-    if (next) {
-      video.play().catch(() => {
-        // Swallow: muted autoplay is almost never blocked, but just in case.
-      });
+    if (video.srcObject !== next) {
+      video.srcObject = next;
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [participant.stream, participant.streamVersion]);
+    if (next && !participant.isVideoOff) {
+      video.play().catch(() => {});
+    }
+  }, [participant.stream, participant.isVideoOff]);
 
-  // For remote tiles: show video only when we have a stream with a video track that is live
-  const hasLiveVideo = participant.stream?.getVideoTracks().some((t) => t.readyState === 'live' && !t.muted) ?? false;
-  const showVideo = participant.isMe
-    ? !!participant.stream && !participant.isVideoOff
-    : !!participant.stream && hasLiveVideo;
+  const hasVideoTrack = participant.stream && participant.stream.getVideoTracks().length > 0;
+  const showVideo = !participant.isVideoOff && hasVideoTrack;
 
   return (
     <div className="relative h-full w-full overflow-hidden rounded-[12px] bg-[var(--camoff-tile)] flex items-center justify-center border border-transparent hover:border-[#444] transition-colors">
-
       {/* Always rendered — hidden via opacity so srcObject is never lost */}
       <video
         ref={videoRef}
         autoPlay
-        muted={participant.isMe ? true : false}
+        muted={participant.isMe || participant.videoMuted}
         playsInline
         className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-200 ${
           showVideo ? 'opacity-100' : 'opacity-0 pointer-events-none'

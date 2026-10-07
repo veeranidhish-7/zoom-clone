@@ -24,7 +24,12 @@ interface Options {
   localStream: MediaStream | null;
   localMediaReady: boolean;
   enabled: boolean;
+  localMediaState: { video: boolean; audio: boolean };
   onError?: (msg: string) => void;
+  onPeerFailed?: (peerId: number) => void;
+  onPeerLeft?: (peerId: number) => void;
+  onReconnecting?: () => void;
+  onReconnectFailed?: () => void;
 }
 
 type RemoteStreams = Map<number, MediaStream>;
@@ -35,22 +40,42 @@ export function usePeerConnections({
   localStream,
   localMediaReady,
   enabled,
+  localMediaState,
   onError,
+  onPeerFailed,
+  onPeerLeft,
+  onReconnecting,
+  onReconnectFailed,
 }: Options) {
   const [remoteStreams, setRemoteStreams] = useState<RemoteStreams>(new Map());
+  const [mediaStates, setMediaStates] = useState<Map<number, {video: boolean, audio: boolean}>>(new Map());
+  const [retryCount, setRetryCount] = useState(0);
 
   const wsRef = useRef<WebSocket | null>(null);
   const pcsRef = useRef<Map<number, RTCPeerConnection>>(new Map());
   const iceCacheRef = useRef<Map<number, RTCIceCandidateInit[]>>(new Map());
   const remoteStreamsRef = useRef<RemoteStreams>(new Map());
-  // Keep refs so async signal handlers always read latest values
+  const intentionalCloseRef = useRef(false);
+
   const localStreamRef = useRef<MediaStream | null>(localStream);
   useEffect(() => { localStreamRef.current = localStream; }, [localStream]);
 
-  const onErrorRef = useRef(onError);
-  useEffect(() => { onErrorRef.current = onError; });
+  const localMediaStateRef = useRef(localMediaState);
+  useEffect(() => { localMediaStateRef.current = localMediaState; }, [localMediaState]);
 
-  // ── helpers ───────────────────────────────────────────────────────────────
+  const onErrorRef = useRef(onError);
+  const onPeerFailedRef = useRef(onPeerFailed);
+  const onPeerLeftRef = useRef(onPeerLeft);
+  const onReconnectingRef = useRef(onReconnecting);
+  const onReconnectFailedRef = useRef(onReconnectFailed);
+  
+  useEffect(() => { 
+    onErrorRef.current = onError;
+    onPeerFailedRef.current = onPeerFailed;
+    onPeerLeftRef.current = onPeerLeft;
+    onReconnectingRef.current = onReconnecting;
+    onReconnectFailedRef.current = onReconnectFailed;
+  });
 
   const send = useCallback((msg: object) => {
     const ws = wsRef.current;
@@ -59,6 +84,11 @@ export function usePeerConnections({
       ws.send(JSON.stringify(msg));
     }
   }, []);
+
+  // Broadcast media state when it changes
+  useEffect(() => {
+    send({ type: 'media-state', video: localMediaState.video, audio: localMediaState.audio });
+  }, [localMediaState, send]);
 
   const updateRemoteStream = useCallback((peerId: number, stream: MediaStream | null) => {
     const next = new Map(remoteStreamsRef.current);
@@ -77,26 +107,21 @@ export function usePeerConnections({
   const createPc = useCallback((peerId: number): RTCPeerConnection => {
     const pc = new RTCPeerConnection({ iceServers: getIceServers() });
     pcsRef.current.set(peerId, pc);
-    console.debug(`[rtc] Peer connection created for ${peerId}`);
 
     pc.onconnectionstatechange = () => {
-      console.debug(`[rtc] connectionState for ${peerId}: ${pc.connectionState}`);
       if (pc.connectionState === 'failed') {
-        onErrorRef.current?.(`Connection to participant ${peerId} failed`);
+        onPeerFailedRef.current?.(peerId);
+        closePeer(peerId);
+      } else if (pc.connectionState === 'connected') {
+        const lms = localMediaStateRef.current;
+        send({ type: 'media-state', to: peerId, video: lms.video, audio: lms.audio });
       }
     };
 
-    pc.oniceconnectionstatechange = () => {
-      console.debug(`[rtc] iceConnectionState for ${peerId}: ${pc.iceConnectionState}`);
-    };
-
-    // Add local tracks
     const stream = localStreamRef.current;
-    let tracksAdded = 0;
     if (stream) {
       stream.getTracks().forEach((t) => {
         pc.addTrack(t, stream);
-        tracksAdded++;
       });
       if (stream.getVideoTracks().length === 0) {
         pc.addTransceiver('video', { direction: 'sendrecv', streams: [stream] });
@@ -108,10 +133,8 @@ export function usePeerConnections({
       pc.addTransceiver('video', { direction: 'recvonly' });
       pc.addTransceiver('audio', { direction: 'recvonly' });
     }
-    console.debug(`[rtc] Added ${tracksAdded} local tracks to connection ${peerId} (stream present: ${!!stream})`);
 
     pc.ontrack = (ev) => {
-      console.debug(`[rtc] ontrack fired for ${peerId}, track kind: ${ev.track.kind}`);
       let remoteStream = remoteStreamsRef.current.get(peerId);
       if (!remoteStream) {
         remoteStream = ev.streams && ev.streams[0] ? ev.streams[0] : new MediaStream();
@@ -124,7 +147,6 @@ export function usePeerConnections({
 
     pc.onicecandidate = (ev) => {
       if (ev.candidate) {
-        console.debug(`[rtc] Sending ICE candidate to ${peerId}`);
         send({ type: 'ice', to: peerId, candidate: ev.candidate });
       }
     };
@@ -140,18 +162,15 @@ export function usePeerConnections({
     }
   }, []);
 
-  // ── signal handlers ──────────────────────────────────────────────────────
-
   const handlePeers = useCallback(async (peers: number[]) => {
     for (const peerId of peers) {
       if (pcsRef.current.has(peerId)) continue;
-      console.debug(`[rtc] Creating offer for existing peer ${peerId}`);
       const pc = createPc(peerId);
       try {
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
         send({ type: 'offer', to: peerId, sdp: offer });
-      } catch (e) { console.error('offer error for', peerId, e); }
+      } catch (e) { console.error('offer error', e); }
     }
   }, [createPc, send]);
 
@@ -164,7 +183,7 @@ export function usePeerConnections({
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
       send({ type: 'answer', to: from, sdp: answer });
-    } catch (e) { console.error('answer error for', from, e); }
+    } catch (e) { console.error('answer error', e); }
   }, [createPc, drainIceCache, send]);
 
   const handleAnswer = useCallback(async (from: number, sdp: RTCSessionDescriptionInit) => {
@@ -173,47 +192,59 @@ export function usePeerConnections({
     try {
       await pc.setRemoteDescription(new RTCSessionDescription(sdp));
       await drainIceCache(from, pc);
-    } catch (e) { console.error('set answer error for', from, e); }
+    } catch (e) { console.error('set answer error', e); }
   }, [drainIceCache]);
 
   const handleIce = useCallback(async (from: number, candidate: RTCIceCandidateInit) => {
     const pc = pcsRef.current.get(from);
     if (!pc || !pc.remoteDescription) {
-      console.debug(`[rtc] Queueing ICE candidate from ${from} (no remote description yet)`);
       const cache = iceCacheRef.current.get(from) ?? [];
       cache.push(candidate);
       iceCacheRef.current.set(from, cache);
       return;
     }
-    console.debug(`[rtc] Adding ICE candidate from ${from}`);
-    try { await pc.addIceCandidate(new RTCIceCandidate(candidate)); } catch (e) { console.warn('ICE add error', e); }
+    try { await pc.addIceCandidate(new RTCIceCandidate(candidate)); } catch (e) { console.warn('ICE error', e); }
   }, []);
 
   const handlePeerLeft = useCallback((peerId: number) => {
     closePeer(peerId);
+    onPeerLeftRef.current?.(peerId);
   }, [closePeer]);
-
-  // ── WebSocket setup ───────────────────────────────────────────────────────
 
   useEffect(() => {
     if (!enabled || !participantId || !localMediaReady) return;
-    if (wsRef.current) {
-      console.debug('[rtc] WebSocket already exists, skipping duplicate creation');
-      return;
-    }
+    let isActive = true;
+
+    if (wsRef.current) return;
 
     const ws = new WebSocket(wsUrl(meetingCode, participantId));
     wsRef.current = ws;
-    console.debug(`[rtc] WebSocket opened for participant ${participantId}`);
+
+    ws.onopen = () => {
+      const lms = localMediaStateRef.current;
+      send({ type: 'media-state', video: lms.video, audio: lms.audio });
+    };
 
     ws.onclose = () => {
-      console.debug(`[rtc] WebSocket closed for participant ${participantId}`);
+      if (wsRef.current === ws) wsRef.current = null;
+      if (!isActive || intentionalCloseRef.current) return;
+      
+      if (retryCount < 5) {
+        onReconnectingRef.current?.();
+        const delay = retryCount === 0 ? 1000 : retryCount === 1 ? 2000 : 4000;
+        setTimeout(() => {
+          if (isActive && !intentionalCloseRef.current) {
+            setRetryCount((c) => c + 1);
+          }
+        }, delay);
+      } else {
+        onReconnectFailedRef.current?.();
+      }
     };
 
     ws.onmessage = (ev) => {
       let msg: Record<string, unknown>;
       try { msg = JSON.parse(ev.data as string); } catch { return; }
-      console.debug(`[rtc] Received message: ${ev.data}`);
       const type = msg.type as string;
       if (type === 'peers')       handlePeers((msg.peers as number[]) ?? []);
       else if (type === 'offer')  handleOffer(msg.from as number, msg.sdp as RTCSessionDescriptionInit);
@@ -221,15 +252,29 @@ export function usePeerConnections({
       else if (type === 'ice')    handleIce(msg.from as number, msg.candidate as RTCIceCandidateInit);
       else if (type === 'peer-left' || type === 'peer-joined') {
         if (type === 'peer-left') handlePeerLeft(msg.id as number);
-        // peer-joined: wait for their offer, no action needed
+        if (type === 'peer-joined') {
+          const lms = localMediaStateRef.current;
+          send({ type: 'media-state', to: msg.id, video: lms.video, audio: lms.audio });
+        }
+      } else if (type === 'media-state') {
+        const from = msg.from as number;
+        const video = msg.video as boolean;
+        const audio = msg.audio as boolean;
+        setMediaStates((prev) => {
+          const next = new Map(prev);
+          next.set(from, { video, audio });
+          return next;
+        });
       }
     };
 
     ws.onerror = () => onErrorRef.current?.('Signaling connection error');
 
     return () => {
-      console.debug(`[rtc] Cleaning up WebSocket and peer connections`);
-      ws.close();
+      isActive = false;
+      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+        ws.close();
+      }
       if (wsRef.current === ws) wsRef.current = null;
       pcsRef.current.forEach((pc) => pc.close());
       pcsRef.current.clear();
@@ -238,50 +283,21 @@ export function usePeerConnections({
       setRemoteStreams(new Map());
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, participantId, meetingCode, localMediaReady]);
+  }, [enabled, participantId, meetingCode, localMediaReady, retryCount]);
 
   const closeAll = useCallback(() => {
-    wsRef.current?.close();
+    intentionalCloseRef.current = true;
+    if (wsRef.current && (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING)) {
+      wsRef.current.close();
+    }
     wsRef.current = null;
     pcsRef.current.forEach((pc) => pc.close());
     pcsRef.current.clear();
     iceCacheRef.current.clear();
     remoteStreamsRef.current.clear();
     setRemoteStreams(new Map());
+    setMediaStates(new Map());
   }, []);
 
-  // ── replaceVideoTrack: call after local camera toggle (no renegotiation) ──
-  const replaceVideoTrack = useCallback((track: MediaStreamTrack | null) => {
-    pcsRef.current.forEach((pc) => {
-      const sender = pc.getTransceivers().find((t) => t.receiver.track.kind === 'video')?.sender;
-      if (sender) {
-        sender.replaceTrack(track).catch((e) => console.error('replaceTrack error', e));
-      } else if (track) {
-        // No video sender yet (joined without camera): add the track
-        const stream = localStreamRef.current;
-        if (stream) pc.addTrack(track, stream);
-      }
-    });
-  }, []);
-
-  useEffect(() => {
-    if (!localStream) return;
-    
-    const handleAddTrack = (e: MediaStreamTrackEvent) => {
-      if (e.track.kind === 'video') replaceVideoTrack(e.track);
-    };
-    const handleRemoveTrack = (e: MediaStreamTrackEvent) => {
-      if (e.track.kind === 'video') replaceVideoTrack(null);
-    };
-
-    localStream.addEventListener('addtrack', handleAddTrack);
-    localStream.addEventListener('removetrack', handleRemoveTrack);
-
-    return () => {
-      localStream.removeEventListener('addtrack', handleAddTrack);
-      localStream.removeEventListener('removetrack', handleRemoveTrack);
-    };
-  }, [localStream, replaceVideoTrack]);
-
-  return { remoteStreams, closeAll, replaceVideoTrack };
+  return { remoteStreams, mediaStates, closeAll };
 }
