@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 
 export interface TileParticipant {
   id: number;
@@ -20,6 +20,50 @@ function getInitials(name: string) {
 
 export default function VideoTile({ participant }: { participant: TileParticipant }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [, setTrackStateTick] = useState(0);
+
+  useEffect(() => {
+    const stream = participant.stream;
+    if (!stream) return;
+
+    const tick = () => setTrackStateTick((n: number) => n + 1);
+
+    const bindTrack = (t: MediaStreamTrack) => {
+      if (t.kind === 'video') {
+        t.addEventListener('mute', tick);
+        t.addEventListener('unmute', tick);
+        t.addEventListener('ended', tick);
+      }
+    };
+    const unbindTrack = (t: MediaStreamTrack) => {
+      if (t.kind === 'video') {
+        t.removeEventListener('mute', tick);
+        t.removeEventListener('unmute', tick);
+        t.removeEventListener('ended', tick);
+      }
+    };
+
+    const tracks = stream.getVideoTracks();
+    tracks.forEach(bindTrack);
+
+    const handleAddTrack = (e: MediaStreamTrackEvent) => {
+      bindTrack(e.track);
+      tick();
+    };
+    const handleRemoveTrack = (e: MediaStreamTrackEvent) => {
+      unbindTrack(e.track);
+      tick();
+    };
+
+    stream.addEventListener('addtrack', handleAddTrack);
+    stream.addEventListener('removetrack', handleRemoveTrack);
+
+    return () => {
+      tracks.forEach(unbindTrack);
+      stream.removeEventListener('addtrack', handleAddTrack);
+      stream.removeEventListener('removetrack', handleRemoveTrack);
+    };
+  }, [participant.stream]);
 
   // Re-bind srcObject whenever the stream object changes OR whenever tracks
   // are added/removed in-place (signalled by streamVersion).

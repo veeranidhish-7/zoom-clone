@@ -98,6 +98,12 @@ export function usePeerConnections({
         pc.addTrack(t, stream);
         tracksAdded++;
       });
+      if (stream.getVideoTracks().length === 0) {
+        pc.addTransceiver('video', { direction: 'sendrecv', streams: [stream] });
+      }
+      if (stream.getAudioTracks().length === 0) {
+        pc.addTransceiver('audio', { direction: 'sendrecv', streams: [stream] });
+      }
     } else {
       pc.addTransceiver('video', { direction: 'recvonly' });
       pc.addTransceiver('audio', { direction: 'recvonly' });
@@ -247,7 +253,7 @@ export function usePeerConnections({
   // ── replaceVideoTrack: call after local camera toggle (no renegotiation) ──
   const replaceVideoTrack = useCallback((track: MediaStreamTrack | null) => {
     pcsRef.current.forEach((pc) => {
-      const sender = pc.getSenders().find((s) => s.track?.kind === 'video' || (s.track === null && track?.kind === 'video'));
+      const sender = pc.getTransceivers().find((t) => t.receiver.track.kind === 'video')?.sender;
       if (sender) {
         sender.replaceTrack(track).catch((e) => console.error('replaceTrack error', e));
       } else if (track) {
@@ -257,6 +263,25 @@ export function usePeerConnections({
       }
     });
   }, []);
+
+  useEffect(() => {
+    if (!localStream) return;
+    
+    const handleAddTrack = (e: MediaStreamTrackEvent) => {
+      if (e.track.kind === 'video') replaceVideoTrack(e.track);
+    };
+    const handleRemoveTrack = (e: MediaStreamTrackEvent) => {
+      if (e.track.kind === 'video') replaceVideoTrack(null);
+    };
+
+    localStream.addEventListener('addtrack', handleAddTrack);
+    localStream.addEventListener('removetrack', handleRemoveTrack);
+
+    return () => {
+      localStream.removeEventListener('addtrack', handleAddTrack);
+      localStream.removeEventListener('removetrack', handleRemoveTrack);
+    };
+  }, [localStream, replaceVideoTrack]);
 
   return { remoteStreams, closeAll, replaceVideoTrack };
 }
